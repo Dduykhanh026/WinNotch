@@ -1,0 +1,351 @@
+<Window x:Class="WinNotch.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cài đặt WinNotch"
+        Width="560"
+        Height="680"
+        FontFamily="{StaticResource AppleFontFamily}"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#0D0F15"
+        Foreground="#F3F5FA"
+        Icon="pack://application:,,,/Assets/app.ico">
+
+    <Grid Margin="20,16,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="WinNotch"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="#FFFFFF" />
+                <TextBlock Text="Dynamic Notch cho Windows 10 &amp; 11 • Phím tắt mở nhanh: Alt + N"
+                           FontSize="11.5"
+                           Foreground="#949CB0"
+                           Margin="0,2,0,0" />
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Background="#1D3B82F6"
+                    BorderBrush="#443B82F6"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="10,4"
+                    VerticalAlignment="Center">
+                <TextBlock Text="{Binding ModeBadgeText}"
+                           Foreground="#93C5FD"
+                           FontSize="10.5"
+                           FontWeight="SemiBold" />
+            </Border>
+        </Grid>
+
+        <!-- Scrollable Settings Cards -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+            <StackPanel>
+
+                <!-- Card 1: Display & Physics -->
+                <TextBlock Text="HIỂN THỊ &amp; CHUYỂN ĐỘNG"
+                           FontSize="10.5"
+                           FontWeight="Bold"
+                           Foreground="#7E869A"
+                           Margin="4,0,0,6" />
+                <Border Background="#161923"
+                        BorderBrush="#242938"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="14,12"
+                        Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="Màn hình hiển thị Notch" FontSize="12" FontWeight="SemiBold" />
+                        <ComboBox Style="{StaticResource FluentDarkComboBox}"
+                                  ItemsSource="{Binding Monitors}"
+                                  SelectedValuePath="DeviceName"
+                                  DisplayMemberPath="Label"
+                                  SelectedValue="{Binding SelectedMonitorDevice}"
+                                  Margin="0,6,0,12"
+                                  Height="32" />
+
+                        <TextBlock Text="Độ nảy vật lý lò xo (Spring Physics)" FontSize="12" FontWeight="SemiBold" />
+                        <ComboBox Style="{StaticResource FluentDarkComboBox}"
+                                  ItemsSource="{Binding SpringPresets}"
+                                  SelectedValuePath="Key"
+                                  DisplayMemberPath="Label"
+                                  SelectedValue="{Binding SelectedSpringPreset}"
+                                  Margin="0,6,0,12"
+                                  Height="32" />
+
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="58" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Độ trễ giữ chuột để bung Notch (Chống lướt nhầm)"
+                                       FontSize="12"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding HoverExpandDelayMs, StringFormat={}{0} ms}"
+                                       Foreground="#93C5FD"
+                                       FontSize="11.5"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Right" />
+                        </Grid>
+                        <Slider Style="{StaticResource NotchSleekSlider}"
+                                Minimum="60"
+                                Maximum="450"
+                                TickFrequency="10"
+                                IsSnapToTickEnabled="True"
+                                Value="{Binding HoverExpandDelayMs}"
+                                Margin="0,5,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 2: Interaction & Browser Protection -->
+                <TextBlock Text="TƯƠNG TÁC &amp; HỆ THỐNG"
+                           FontSize="10.5"
+                           FontWeight="Bold"
+                           Foreground="#7E869A"
+                           Margin="4,0,0,6" />
+                <Border Background="#161923"
+                        BorderBrush="#242938"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="14,10"
+                        Margin="0,0,0,14">
+                    <StackPanel>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Giữ phím Ctrl để bấm xuyên qua Notch (Ghost Mode)" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Làm mờ Notch còn 20% để bấm dễ dàng vào Tab trình duyệt bên dưới" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableCtrlGhostPassthrough}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Thay thế thanh Âm lượng gốc của Windows 11" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Bắt phím Media tăng/giảm âm lượng để hiện trực tiếp trên Notch" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding ReplaceSystemVolumeOsd}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Tự động ẩn khi xem Video / Chơi Game Fullscreen" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Tương thích chuẩn với chế độ Tự động ẩn Taskbar &amp; màn hình 125% DPI" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableFullscreenHide}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Khởi động cùng Windows" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Tự chạy nền nhẹ nhàng ngay khi đăng nhập máy" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding StartWithWindows}" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 3: Modules & File Shelf -->
+                <TextBlock Text="TIỆN ÍCH &amp; KHAY GIỮ FILE"
+                           FontSize="10.5"
+                           FontWeight="Bold"
+                           Foreground="#7E869A"
+                           Margin="4,0,0,6" />
+                <Border Background="#161923"
+                        BorderBrush="#242938"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="14,10"
+                        Margin="0,0,0,8">
+                    <StackPanel>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Hiệu ứng Face ID Dynamic Island khi mở khóa Windows" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Bung hoạt ảnh quét Face ID &amp; mở khóa xanh lá ngay khi đăng nhập lại máy" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Style="{StaticResource NotchPillButton}"
+                                    Command="{Binding PreviewFaceIdCommand}"
+                                    Padding="10,4"
+                                    Margin="0,0,10,0"
+                                    FontSize="10.8"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Xem thử hoạt ảnh Face ID ngay trên thanh Notch"
+                                    Content="Xem thử" />
+                            <CheckBox Grid.Column="2" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableUnlockFaceIdHud}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Sóng nhạc FFT thời gian thực" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Chỉ chạy khi có trình phát nhạc đang Playing (chống nhiễu âm báo)" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableFftVisualizer}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Chấm bảo mật Camera (Xanh) &amp; Micro (Cam)" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Cảnh báo ngay trên Notch khi có ứng dụng bật Webcam hoặc thu âm" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnablePrivacyDots}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Thông báo HUD Sạc Pin &amp; Chuyển Bài Hát" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Bung nhanh thông báo khi cắm sạc, pin yếu (20%/10%) hoặc qua bài mới" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableBatteryHud}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Hiện tốc độ mạng (↓ MB/s) trên thanh Notch thu gọn" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Thay thế ngày ngắn bằng tốc độ tải xuống trực tiếp khi Notch đang rảnh" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding ShowCollapsedNetworkSpeed}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Tự động xóa file khỏi Khay sau khi kéo thả ra ngoài" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Tắt mặc định để bạn có thể kéo cùng 1 file sang Zalo, Email nhiều lần" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding AutoRemoveShelfItemAfterDrag}" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="{Binding StoragePathDisplay, StringFormat=Thư mục dữ liệu nội bộ: {0}}"
+                           Foreground="#687086"
+                           FontSize="10"
+                           Margin="4,2,0,4"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer Buttons -->
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    Style="{StaticResource NotchPillButton}"
+                    Command="{Binding ResetDefaultsCommand}"
+                    Padding="12,6"
+                    FontSize="11.5"
+                    Content="Khôi phục mặc định" />
+
+            <Button Grid.Column="2"
+                    Style="{StaticResource NotchPillButton}"
+                    Command="{Binding CancelCommand}"
+                    Margin="0,0,8,0"
+                    Padding="14,6"
+                    FontSize="11.5"
+                    Content="Đóng" />
+
+            <Button Grid.Column="3"
+                    Command="{Binding SaveAndCloseCommand}"
+                    Cursor="Hand"
+                    Padding="18,6"
+                    FontSize="11.5"
+                    FontWeight="SemiBold"
+                    Foreground="#FFFFFF">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="SaveBd"
+                                Background="#2563EB"
+                                BorderBrush="#3B82F6"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SaveBd" Property="Background" Value="#3B82F6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+                Lưu thay đổi
+            </Button>
+        </Grid>
+    </Grid>
+</Window>

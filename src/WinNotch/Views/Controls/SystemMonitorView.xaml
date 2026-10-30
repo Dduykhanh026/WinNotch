@@ -1,0 +1,467 @@
+<UserControl x:Class="WinNotch.Views.Controls.SystemMonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:WinNotch.Views.Controls">
+
+    <UserControl.Resources>
+        <!-- Sleek 5px Capsule Metric Progress Bar (iStat Menus / macOS Sequoia style) -->
+        <Style x:Key="NotchMetricBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="5" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="100" />
+            <Setter Property="Background" Value="#20FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid x:Name="PART_Track" Background="Transparent">
+                            <Border CornerRadius="2.5" Background="{TemplateBinding Background}" />
+                            <Border x:Name="PART_Indicator"
+                                    CornerRadius="2.5"
+                                    HorizontalAlignment="Left"
+                                    Background="{TemplateBinding Foreground}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="12" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ======================================================================= -->
+        <!-- CARD 1 (LEFT): HARDWARE, STORAGE R/W & TOP RESOURCE PROCESS             -->
+        <!-- ======================================================================= -->
+        <controls:SquircleBorder Grid.Column="0"
+                                 Background="{StaticResource FrostedCardBrush}"
+                                 BorderBrush="{StaticResource FrostedCardBorderBrush}"
+                                 BorderThickness="1"
+                                 CornerRadius="14"
+                                 Padding="14,11,14,11">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Row 0: CPU % + GPU Badge + Live 32s CPU Sparkline -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="108" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <controls:IconsaxIcon Kind="Cpu"
+                                                      Size="13.5"
+                                                      Foreground="#60A5FA"
+                                                      Margin="0,0,5.5,0"
+                                                      VerticalAlignment="Center" />
+                                <TextBlock Text="CPU"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontSize="11.5"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding SysCpuModelLabel}"
+                                       ToolTip="{Binding SysCpuModelTooltip}"
+                                       Foreground="#8E98AE"
+                                       FontSize="10.2"
+                                       FontWeight="Regular"
+                                       Margin="6,0,0,0"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding SysCpuPercentText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+
+                            <controls:SquircleBorder CornerRadius="5.5"
+                                                     Background="#18FFFFFF"
+                                                     BorderBrush="#24FFFFFF"
+                                                     BorderThickness="1"
+                                                     Padding="6.5,2"
+                                                     Margin="8,0,0,0"
+                                                     VerticalAlignment="Center"
+                                                     ToolTip="{Binding SysGpuTooltip}">
+                                <TextBlock Text="{Binding SysGpuBadgeText}"
+                                           Typography.NumeralAlignment="Tabular"
+                                           Foreground="#93C5FD"
+                                           FontSize="10.5"
+                                           FontWeight="Medium"
+                                           VerticalAlignment="Center" />
+                            </controls:SquircleBorder>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <controls:SquircleBorder Grid.Column="1"
+                                             Height="46"
+                                             CornerRadius="7.5"
+                                             Background="#12FFFFFF"
+                                             BorderBrush="#1EFFFFFF"
+                                             BorderThickness="1"
+                                             Padding="4,3">
+                        <controls:SparklineGraph PrimaryValues="{Binding SysCpuHistory}"
+                                                 PrimaryColor="#4C9AFF"
+                                                 IsFixedPercentScale="True" />
+                    </controls:SquircleBorder>
+                </Grid>
+
+                <!-- Row 1: Physical RAM Usage & Adaptive Color Bar -->
+                <StackPanel Grid.Row="1" Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:IconsaxIcon Kind="Ram"
+                                                  Size="12.5"
+                                                  Foreground="#38BDF8"
+                                                  Margin="0,0,5.5,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="Bộ nhớ RAM"
+                                       Foreground="#E2E8F5"
+                                       FontSize="11"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding SysRamDetailText}"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="10.6"
+                                   FontWeight="Medium"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <ProgressBar Style="{StaticResource NotchMetricBar}"
+                                 Value="{Binding SysRamPercent, Mode=OneWay}"
+                                 Foreground="{Binding SysRamBarBrush}"
+                                 Margin="0,5,0,0" />
+                </StackPanel>
+
+                <!-- Row 2: System Disk Free Space + Live Read / Write Speed -->
+                <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:IconsaxIcon Kind="Driver"
+                                                  Size="12.5"
+                                                  Foreground="#A5B4FC"
+                                                  Margin="0,0,5.5,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SysDriveLabelText}"
+                                       ToolTip="{Binding SysDriveTooltip}"
+                                       Foreground="#E2E8F5"
+                                       FontSize="11"
+                                       FontWeight="Medium"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding SysDiskRwText}"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="#A5B4FC"
+                                   FontSize="10.4"
+                                   FontWeight="Medium"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <ProgressBar Style="{StaticResource NotchMetricBar}"
+                                 Value="{Binding SysDriveUsedPercent, Mode=OneWay}"
+                                 Foreground="#818CF8"
+                                 Margin="0,5,0,0" />
+                </StackPanel>
+
+                <!-- Row 3: Top Resource-Consuming App Footer -->
+                <controls:SquircleBorder Grid.Row="3"
+                                         VerticalAlignment="Bottom"
+                                         CornerRadius="7"
+                                         Background="#12FFFFFF"
+                                         BorderBrush="#1AFFFFFF"
+                                         BorderThickness="1"
+                                         Padding="8.5,4">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:IconsaxIcon Kind="Flash"
+                                                  Size="11"
+                                                  Foreground="#FBBF24"
+                                                  Margin="0,0,5,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="Cao nhất: "
+                                       Foreground="#8E98AE"
+                                       FontSize="10.2"
+                                       FontWeight="Regular"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SysTopAppName}"
+                                       ToolTip="{Binding SysTopAppName}"
+                                       Foreground="#F3F6FC"
+                                       FontSize="10.5"
+                                       FontWeight="Medium"
+                                       MaxWidth="126"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding SysTopAppMetricText}"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="#FCD34D"
+                                   FontSize="10.3"
+                                   FontWeight="Medium"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </controls:SquircleBorder>
+            </Grid>
+        </controls:SquircleBorder>
+
+        <!-- ======================================================================= -->
+        <!-- CARD 2 (RIGHT): LIVE NETWORK THROUGHPUT, DUAL WAVE & QUICK UTILITIES    -->
+        <!-- ======================================================================= -->
+        <controls:SquircleBorder Grid.Column="2"
+                                 Background="{StaticResource FrostedCardBrush}"
+                                 BorderBrush="{StaticResource FrostedCardBorderBrush}"
+                                 BorderThickness="1"
+                                 CornerRadius="14"
+                                 Padding="14,11,14,11">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Row 0: Active Adapter (Wi-Fi / Ethernet) + Session Total Traffic -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <controls:IconsaxIcon Kind="{Binding SysNetIcon}"
+                                              Size="13.5"
+                                              Foreground="#38BDF8"
+                                              Margin="0,0,6,0"
+                                              VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding SysNetAdapterText}"
+                                   ToolTip="{Binding SysNetAdapterText}"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontSize="11.5"
+                                   FontWeight="SemiBold"
+                                   MaxWidth="132"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding SysNetSessionText}"
+                               Typography.NumeralAlignment="Tabular"
+                               Foreground="#94A0B8"
+                               FontSize="10.2"
+                               FontWeight="Regular"
+                               VerticalAlignment="Center" />
+                </Grid>
+
+                <!-- Row 1: Dual Live Download & Upload Readout Tiles -->
+                <Grid Grid.Row="1" Margin="0,7,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <controls:SquircleBorder Grid.Column="0"
+                                             CornerRadius="8"
+                                             Background="#1438BDF8"
+                                             BorderBrush="#2A38BDF8"
+                                             BorderThickness="1"
+                                             Padding="9,4.5">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <controls:IconsaxIcon Kind="ArrowDown"
+                                                      Size="10"
+                                                      Foreground="#38BDF8"
+                                                      Margin="0,0,4,0"
+                                                      VerticalAlignment="Center" />
+                                <TextBlock Text="Tải xuống"
+                                           Foreground="#93C5FD"
+                                           FontSize="9.8"
+                                           FontWeight="Medium"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding SysNetDownText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#F0F9FF"
+                                       FontSize="12.6"
+                                       FontWeight="SemiBold"
+                                       Margin="0,1,0,0" />
+                        </StackPanel>
+                    </controls:SquircleBorder>
+
+                    <controls:SquircleBorder Grid.Column="2"
+                                             CornerRadius="8"
+                                             Background="#1234D399"
+                                             BorderBrush="#2634D399"
+                                             BorderThickness="1"
+                                             Padding="9,4.5">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <controls:IconsaxIcon Kind="ArrowUp"
+                                                      Size="10"
+                                                      Foreground="#34D399"
+                                                      Margin="0,0,4,0"
+                                                      VerticalAlignment="Center" />
+                                <TextBlock Text="Tải lên"
+                                           Foreground="#6EE7B7"
+                                           FontSize="9.8"
+                                           FontWeight="Medium"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding SysNetUpText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#ECFDF5"
+                                       FontSize="12.6"
+                                       FontWeight="SemiBold"
+                                       Margin="0,1,0,0" />
+                        </StackPanel>
+                    </controls:SquircleBorder>
+                </Grid>
+
+                <!-- Row 2: Dual-Wave 32s Live Network Sparkline + Peak Indicator -->
+                <controls:SquircleBorder Grid.Row="2"
+                                         Height="60"
+                                         Margin="0,7,0,0"
+                                         CornerRadius="8.5"
+                                         Background="#12FFFFFF"
+                                         BorderBrush="#1CFFFFFF"
+                                         BorderThickness="1"
+                                         Padding="5,4">
+                    <Grid>
+                        <controls:SparklineGraph PrimaryValues="{Binding SysNetDownHistory}"
+                                                 SecondaryValues="{Binding SysNetUpHistory}"
+                                                 PrimaryColor="#38BDF8"
+                                                 SecondaryColor="#34D399"
+                                                 IsFixedPercentScale="False"
+                                                 MinAutoPeak="65536" />
+
+                        <TextBlock Text="{Binding SysNetPeakLabel}"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="#7E8AA0"
+                                   FontSize="9.5"
+                                   FontWeight="Regular"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Top"
+                                   Margin="0,0,2,0"
+                                   IsHitTestVisible="False" />
+                    </Grid>
+                </controls:SquircleBorder>
+
+                <!-- Row 3: Quick Utilities Footer (Copy Local IPv4 | System Uptime | Task Manager) -->
+                <Grid Grid.Row="3" VerticalAlignment="Bottom">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0"
+                            Style="{StaticResource NotchPillButton}"
+                            Command="{Binding CopyLocalIpCommand}"
+                            Height="25"
+                            Padding="8,0"
+                            ToolTip="Bấm để sao chép địa chỉ IPv4 nội bộ vào Clipboard">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:IconsaxIcon Kind="Copy"
+                                                  Size="11.5"
+                                                  Foreground="{Binding SysIpAccentBrush}"
+                                                  Margin="0,0,5,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SysIpButtonText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="{Binding SysIpTextBrush}"
+                                       FontSize="10.4"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                ToolTip="Thời gian máy tính đã hoạt động liên tục (Uptime)">
+                        <controls:IconsaxIcon Kind="Timer"
+                                              Size="11"
+                                              Foreground="#7F8BA3"
+                                              Margin="0,0,4,0"
+                                              VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding SysUptimeText}"
+                                   Typography.NumeralAlignment="Tabular"
+                                   Foreground="#94A0B8"
+                                   FontSize="10.2"
+                                   FontWeight="Regular"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <Button Grid.Column="2"
+                            Style="{StaticResource NotchPillButton}"
+                            Command="{Binding OpenTaskManagerCommand}"
+                            Height="25"
+                            Padding="8.5,0"
+                            ToolTip="Mở nhanh Windows Task Manager">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:IconsaxIcon Kind="Activity"
+                                                  Size="11.5"
+                                                  Foreground="#93C5FD"
+                                                  Margin="0,0,5,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="Task Mgr"
+                                       FontSize="10.4"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Grid>
+        </controls:SquircleBorder>
+    </Grid>
+</UserControl>

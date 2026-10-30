@@ -1,0 +1,647 @@
+<Window x:Class="WinNotch.Views.NotchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:WinNotch.Views.Controls"
+        Title="WinNotch"
+        Width="760"
+        Height="320"
+        FontFamily="{StaticResource AppleFontFamily}"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        AllowDrop="True"
+        DragEnter="OnWindowDragEnter"
+        DragOver="OnWindowDragOver"
+        DragLeave="OnWindowDragLeave"
+        Drop="OnWindowDrop">
+
+    <Grid x:Name="RootHost" Width="760" Height="320" Background="Transparent">
+        <!-- 0. Zero-Cost GPU Vector Soft Ambient Halo (240Hz-friendly, no shader blur lag) -->
+        <Path x:Name="NotchAmbientHaloPath"
+              Stroke="#16000000"
+              StrokeThickness="6"
+              IsHitTestVisible="False" />
+        <Path x:Name="NotchContactShadowPath"
+              Stroke="#32000000"
+              StrokeThickness="2.2"
+              IsHitTestVisible="False" />
+
+        <!-- 1. Pitch-Black Concave Notch Shell (#050507) -->
+        <Path x:Name="NotchFillPath"
+              Fill="{StaticResource NotchShellBrush}"
+              MouseEnter="OnNotchSurfaceMouseEnter"
+              MouseLeave="OnNotchSurfaceMouseLeave" />
+
+        <!-- 2. Open Bottom+Sides Rim Highlight (Zero seam on Y=0 top bezel) -->
+        <Path x:Name="NotchRimPath"
+              StrokeThickness="1"
+              IsHitTestVisible="False">
+            <Path.Style>
+                <Style TargetType="Path">
+                    <Setter Property="Stroke" Value="{StaticResource NotchRimBrush}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsTimerAlarmRinging}" Value="True">
+                            <Setter Property="Stroke" Value="{StaticResource NotchAlarmRimBrush}" />
+                            <Setter Property="StrokeThickness" Value="2.0" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Path.Style>
+        </Path>
+
+        <!-- 3. Spring-Sized Content Viewport (Continuous sub-pixel morphing + cross-dissolve) -->
+        <Border x:Name="ContentViewport"
+                Width="132"
+                Height="32"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Background="Transparent"
+                ClipToBounds="True"
+                MouseEnter="OnNotchSurfaceMouseEnter"
+                MouseLeave="OnNotchSurfaceMouseLeave">
+            <Grid>
+
+                <!-- =============================================================== -->
+                <!-- LAYER 1: CAMERA-FREE CENTER-UTILIZED COLLAPSED PILL (32px Slim) -->
+                <!-- =============================================================== -->
+                <Grid x:Name="CollapsedLayer"
+                      Margin="8.5,0,8.5,0.5"
+                      VerticalAlignment="Stretch"
+                      RenderTransformOrigin="0.5,0.45">
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="CollapsedScale" ScaleX="1" ScaleY="1" />
+                    </Grid.RenderTransform>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- MAIN CONTENT ZONE (Utilizes Full Center Without Fake Camera Cutout) -->
+                    <Grid Grid.Column="0" VerticalAlignment="Center">
+
+                        <!-- MODE A: IDLE ("15:05 · T6, 30" or optional "15:05 · ↓ 2.4 MB/s") -->
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsCollapsedIdleMode, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding ClockText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#F3F6FC"
+                                       FontSize="12"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="·"
+                                       Foreground="#58637C"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Margin="6,0"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ShortDateBadgeText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#9DA7BC"
+                                       FontSize="11.5"
+                                       FontWeight="Regular"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding ShowCollapsedNetworkSpeed, Converter={StaticResource InvBoolToVis}}" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding ShowCollapsedNetworkSpeed, Converter={StaticResource BoolToVis}}">
+                                <controls:IconsaxIcon Kind="ArrowDown"
+                                                      Size="10"
+                                                      Foreground="#38BDF8"
+                                                      Margin="0,0,3.5,0"
+                                                      VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding CollapsedNetSpeedText}"
+                                           Typography.NumeralAlignment="Tabular"
+                                           Foreground="#D4E0F5"
+                                           FontSize="11.5"
+                                           FontWeight="Medium"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- MODE B: TIMER ONLY (20x20 Continuous Squircle Badge + Slim Tabular Countdown) -->
+                        <Grid VerticalAlignment="Center"
+                              Visibility="{Binding IsCollapsedTimerOnlyMode, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <controls:SquircleBorder Grid.Column="0"
+                                                     Width="20"
+                                                     Height="20"
+                                                     CornerRadius="5.2"
+                                                     Background="#28FF9F0A"
+                                                     VerticalAlignment="Center">
+                                <controls:IconsaxIcon Kind="Timer"
+                                                      Size="11.8"
+                                                      Foreground="#FF9F0A"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" />
+                            </controls:SquircleBorder>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding TimerCollapsedText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#FFB340"
+                                       FontSize="12.2"
+                                       FontWeight="Medium"
+                                       HorizontalAlignment="Right"
+                                       Margin="7,0,5.5,0"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- MODE C: MUSIC PLAYING (+ Optional Dual-Activity Timer on Right) -->
+                        <Grid VerticalAlignment="Center"
+                              Visibility="{Binding IsCollapsedMusicMode, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- True G2 Continuous Apple Squircle Album Art (20x20, r=5.2) -->
+                            <Grid Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
+                                <controls:SquircleBorder CornerRadius="5.2"
+                                                         Background="#22FFFFFF"
+                                                         BorderBrush="#2AFFFFFF"
+                                                         BorderThickness="0.8"
+                                                         Visibility="{Binding AlbumArt, Converter={StaticResource NullToInvVis}}">
+                                    <controls:IconsaxIcon Kind="Music"
+                                                          Size="11"
+                                                          Foreground="#D8E2F8"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center" />
+                                </controls:SquircleBorder>
+                                <controls:SquircleBorder CornerRadius="5.2"
+                                                         BorderBrush="#32FFFFFF"
+                                                         BorderThickness="0.8"
+                                                         RenderOptions.BitmapScalingMode="HighQuality"
+                                                         Visibility="{Binding AlbumArt, Converter={StaticResource NullToVis}}">
+                                    <controls:SquircleBorder.Background>
+                                        <ImageBrush ImageSource="{Binding AlbumArt}"
+                                                    Stretch="UniformToFill"
+                                                    RenderOptions.BitmapScalingMode="HighQuality" />
+                                    </controls:SquircleBorder.Background>
+                                </controls:SquircleBorder>
+                            </Grid>
+
+                            <!-- Refined Slim Track Title -->
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding CollapsedTrackTitle}"
+                                       Foreground="#EFF3FA"
+                                       FontSize="11.8"
+                                       FontWeight="Medium"
+                                       Margin="8,0,8,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+
+                            <!-- Apple Dynamic Island 5-Bar Center-Symmetric Spring Capsule Waveform -->
+                            <controls:SmoothWaveVisualizer Grid.Column="2"
+                                                           Height="14"
+                                                           BarWidth="1.85"
+                                                           BarGap="2.0"
+                                                           Margin="0,0,5.5,0"
+                                                           VerticalAlignment="Center"
+                                                           IsPlaying="{Binding IsMediaPlaying}"
+                                                           HasAlbumArt="{Binding HasAlbumArt}"
+                                                           BassLevel="{Binding WaveBassLevel}"
+                                                           MidLevel="{Binding WaveMidLevel}"
+                                                           TrebleLevel="{Binding WaveTrebleLevel}"
+                                                           AccentColor="{Binding AmbientGlowColor}" />
+
+                            <!-- Dual-Activity Inline Timer (Music + Timer running together) -->
+                            <StackPanel Grid.Column="3"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding IsCollapsedDualMode, Converter={StaticResource BoolToVis}}">
+                                <Ellipse Width="3"
+                                         Height="3"
+                                         Fill="#40FFFFFF"
+                                         Margin="4,0,8,0"
+                                         VerticalAlignment="Center" />
+                                <controls:SquircleBorder Width="18"
+                                                         Height="18"
+                                                         CornerRadius="4.8"
+                                                         Background="#28FF9F0A"
+                                                         VerticalAlignment="Center">
+                                    <controls:IconsaxIcon Kind="Timer"
+                                                          Size="10.8"
+                                                          Foreground="#FF9F0A"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center" />
+                                </controls:SquircleBorder>
+                                <TextBlock Text="{Binding TimerCollapsedText}"
+                                           Typography.NumeralAlignment="Tabular"
+                                           Foreground="#FFB340"
+                                           FontSize="11.8"
+                                           FontWeight="Medium"
+                                           Margin="5.5,0,5,0"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <!-- TRAILING PRIVACY DOTS -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Ellipse Width="6.5"
+                                 Height="6.5"
+                                 Fill="{StaticResource PrivacyCamBrush}"
+                                 Margin="5,0,4,0"
+                                 VerticalAlignment="Center"
+                                 ToolTip="{Binding CameraTooltip}"
+                                 Visibility="{Binding IsCameraActive, Converter={StaticResource BoolToVis}}" />
+
+                        <Ellipse Width="6.5"
+                                 Height="6.5"
+                                 Fill="{StaticResource PrivacyMicBrush}"
+                                 Margin="4,0,4,0"
+                                 VerticalAlignment="Center"
+                                 ToolTip="{Binding MicrophoneTooltip}"
+                                 Visibility="{Binding IsMicrophoneActive, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- =============================================================== -->
+                <!-- LAYER 2: SYSTEM HUD POPUP (376 x 48 DIPs)                       -->
+                <!-- =============================================================== -->
+                <Grid x:Name="HudLayer"
+                      VerticalAlignment="Stretch"
+                      Visibility="Collapsed"
+                      Opacity="0"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="HudScale" ScaleX="0.92" ScaleY="0.92" />
+                    </Grid.RenderTransform>
+                    <controls:HudView />
+                </Grid>
+
+                <!-- =============================================================== -->
+                <!-- LAYER 3: DRAG-READY DROP SENSOR ZONE (444 x 118, G2 Squircle)   -->
+                <!-- =============================================================== -->
+                <controls:SquircleBorder x:Name="DragReadyLayer"
+                                         Margin="16,11,16,15"
+                                         CornerRadius="12"
+                                         Background="#1C3B82F6"
+                                         BorderBrush="#7260A5FA"
+                                         BorderThickness="1.5"
+                                         Visibility="Collapsed"
+                                         Opacity="0"
+                                         RenderTransformOrigin="0.5,0.0">
+                    <controls:SquircleBorder.RenderTransform>
+                        <ScaleTransform x:Name="DragScale" ScaleX="0.90" ScaleY="0.90" />
+                    </controls:SquircleBorder.RenderTransform>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <controls:IconsaxIcon Kind="ImportTray"
+                                              Size="22"
+                                              Foreground="#93C5FD"
+                                              HorizontalAlignment="Center"
+                                              Margin="0,0,0,5" />
+                        <TextBlock Text="Thả vào Khay giữ file WinNotch"
+                                   Foreground="#F2F7FF"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="Hỗ trợ File, Thư mục, Ảnh chụp &amp; Văn bản"
+                                   Foreground="#B0CEFF"
+                                   FontSize="11.2"
+                                   FontWeight="Regular"
+                                   Margin="0,2.5,0,0"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                </controls:SquircleBorder>
+
+                <!-- =============================================================== -->
+                <!-- LAYER 4: EXPANDED 2-TAB WORKSPACE (684 x 272, r14+p16=R30)      -->
+                <!-- =============================================================== -->
+                <Grid x:Name="ExpandedLayer"
+                      Width="684"
+                      Height="272"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Top"
+                      Visibility="Collapsed"
+                      Opacity="0"
+                      RenderTransformOrigin="0.5,0.0">
+                    <Grid.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="ExpandedScale" ScaleX="0.88" ScaleY="0.88" />
+                            <TranslateTransform x:Name="ExpandedTranslate" Y="-8" />
+                        </TransformGroup>
+                    </Grid.RenderTransform>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Top Navigation Header: Aligned to exact 16px outer grid rail -->
+                    <Grid Grid.Row="0" Margin="16,11,16,11">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Segmented Tab Control (Height=32, Spring-Gliding Active Squircle Pill) -->
+                        <controls:SquircleBorder Grid.Column="0"
+                                                 Height="32"
+                                                 Background="#15FFFFFF"
+                                                 BorderBrush="#1CFFFFFF"
+                                                 BorderThickness="1"
+                                                 CornerRadius="9"
+                                                 Padding="2.5">
+                            <Grid x:Name="SegmentedTabTrack">
+                                <!-- Continuous Spring-Animated Active Pill Indicator -->
+                                <controls:SquircleBorder x:Name="ActiveTabPill"
+                                                         HorizontalAlignment="Left"
+                                                         VerticalAlignment="Stretch"
+                                                         Width="96"
+                                                         CornerRadius="6.5"
+                                                         Background="#2EFFFFFF"
+                                                         BorderBrush="#1AFFFFFF"
+                                                         BorderThickness="0.8"
+                                                         IsHitTestVisible="False">
+                                    <controls:SquircleBorder.RenderTransform>
+                                        <TranslateTransform x:Name="ActiveTabPillTranslate" X="0" />
+                                    </controls:SquircleBorder.RenderTransform>
+                                </controls:SquircleBorder>
+
+                                <StackPanel x:Name="TabButtonsPanel"
+                                            Orientation="Horizontal"
+                                            SizeChanged="OnTabButtonsPanelSizeChanged">
+                                    <Button x:Name="TabBtnOverview"
+                                            Command="{Binding SelectOverviewTabCommand}"
+                                            Cursor="Hand"
+                                            Focusable="False">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <controls:SquircleBorder x:Name="TabBd"
+                                                                         CornerRadius="6.5"
+                                                                         Padding="12,0"
+                                                                         Background="Transparent">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <controls:IconsaxIcon x:Name="TabIcon"
+                                                                              Kind="Setting4"
+                                                                              Size="13.5"
+                                                                              Foreground="{StaticResource TextSecondaryBrush}"
+                                                                              Margin="0,0,6.5,0"
+                                                                              VerticalAlignment="Center" />
+                                                        <TextBlock x:Name="TabTxt"
+                                                                   Text="Điều khiển"
+                                                                   FontSize="12"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </controls:SquircleBorder>
+                                                <ControlTemplate.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                            <Condition Binding="{Binding IsOverviewTabSelected}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter TargetName="TabBd" Property="Background" Value="#12FFFFFF" />
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#DCE3F2" />
+                                                    </MultiDataTrigger>
+                                                    <DataTrigger Binding="{Binding IsOverviewTabSelected}" Value="True">
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#FFFFFF" />
+                                                        <Setter TargetName="TabIcon" Property="Foreground" Value="#60A5FA" />
+                                                    </DataTrigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+
+                                    <Button x:Name="TabBtnSystem"
+                                            Command="{Binding SelectSystemTabCommand}"
+                                            Cursor="Hand"
+                                            Focusable="False"
+                                            Margin="2.5,0,0,0">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <controls:SquircleBorder x:Name="TabBd"
+                                                                         CornerRadius="6.5"
+                                                                         Padding="12,0"
+                                                                         Background="Transparent">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <controls:IconsaxIcon x:Name="TabIcon"
+                                                                              Kind="Activity"
+                                                                              Size="13.5"
+                                                                              Foreground="{StaticResource TextSecondaryBrush}"
+                                                                              Margin="0,0,6.5,0"
+                                                                              VerticalAlignment="Center" />
+                                                        <TextBlock x:Name="TabTxt"
+                                                                   Text="Hệ thống"
+                                                                   FontSize="12"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </controls:SquircleBorder>
+                                                <ControlTemplate.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                            <Condition Binding="{Binding IsSystemTabSelected}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter TargetName="TabBd" Property="Background" Value="#12FFFFFF" />
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#DCE3F2" />
+                                                    </MultiDataTrigger>
+                                                    <DataTrigger Binding="{Binding IsSystemTabSelected}" Value="True">
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#FFFFFF" />
+                                                        <Setter TargetName="TabIcon" Property="Foreground" Value="#60A5FA" />
+                                                    </DataTrigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+
+                                    <Button x:Name="TabBtnShelf"
+                                            Command="{Binding SelectFileShelfTabCommand}"
+                                            Cursor="Hand"
+                                            Focusable="False"
+                                            Margin="2.5,0,0,0">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <controls:SquircleBorder x:Name="TabBd"
+                                                                         CornerRadius="6.5"
+                                                                         Padding="12,0"
+                                                                         Background="Transparent">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <controls:IconsaxIcon x:Name="TabIcon"
+                                                                              Kind="Folder2"
+                                                                              Size="13.5"
+                                                                              Foreground="{StaticResource TextSecondaryBrush}"
+                                                                              Margin="0,0,6.5,0"
+                                                                              VerticalAlignment="Center" />
+                                                        <TextBlock x:Name="TabTxt"
+                                                                   Text="{Binding ShelfTabHeader}"
+                                                                   FontSize="12"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </controls:SquircleBorder>
+                                                <ControlTemplate.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                            <Condition Binding="{Binding IsFileShelfTabSelected}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter TargetName="TabBd" Property="Background" Value="#12FFFFFF" />
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#DCE3F2" />
+                                                    </MultiDataTrigger>
+                                                    <DataTrigger Binding="{Binding IsFileShelfTabSelected}" Value="True">
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#FFFFFF" />
+                                                        <Setter TargetName="TabIcon" Property="Foreground" Value="#60A5FA" />
+                                                    </DataTrigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </controls:SquircleBorder>
+
+                        <!-- Right Utility Cluster: Slim 12.2pt Clock + 32x32 Squircle Pin & Settings -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ClockText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#AEB8CE"
+                                       FontSize="12.2"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,10,0" />
+
+                            <Button Command="{Binding TogglePinCommand}"
+                                    Width="32"
+                                    Height="32"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    ToolTip="Ghim giữ Notch mở cố định (Alt + N)">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <controls:SquircleBorder x:Name="PinBd"
+                                                                 CornerRadius="8"
+                                                                 Background="Transparent">
+                                            <controls:IconsaxIcon x:Name="PinIcon"
+                                                                  Kind="Pin"
+                                                                  Size="15.5"
+                                                                  Foreground="#D4DCF0"
+                                                                  HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center" />
+                                        </controls:SquircleBorder>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="PinBd" Property="Background" Value="#24FFFFFF" />
+                                            </Trigger>
+                                            <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                                                <Setter TargetName="PinBd" Property="Background" Value="#3D3B82F6" />
+                                                <Setter TargetName="PinIcon" Property="Foreground" Value="#93C5FD" />
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <Button Command="{Binding OpenSettingsCommand}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="5,0,0,0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    ToolTip="Cài đặt WinNotch">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <controls:SquircleBorder x:Name="SetBd"
+                                                                 CornerRadius="8"
+                                                                 Background="Transparent">
+                                            <controls:IconsaxIcon Kind="Setting2"
+                                                                  Size="16"
+                                                                  Foreground="#D4DCF0"
+                                                                  HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center" />
+                                        </controls:SquircleBorder>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="SetBd" Property="Background" Value="#24FFFFFF" />
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="SetBd" Property="Background" Value="#34FFFFFF" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Spring-Animated Tab Content Stage (Pre-measured via Visibility=Hidden -> 0ms first-click hitch!) -->
+                    <Grid Grid.Row="1" Margin="16,0,16,16">
+                        <!-- Tab 1: Overview (Exact 12px Gutter + 50/50 Concentric Cards) -->
+                        <Grid x:Name="TabPageOverview"
+                              Visibility="Visible"
+                              Opacity="1"
+                              IsHitTestVisible="True"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform x:Name="TabOverviewScale" ScaleX="1" ScaleY="1" />
+                                    <TranslateTransform x:Name="TabOverviewTranslate" X="0" />
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <controls:MediaOrQuickControlView Grid.Column="0" />
+                            <controls:DashboardView Grid.Column="2" />
+                        </Grid>
+
+                        <!-- Tab 2: Deep System Telemetry & Live Network Speed -->
+                        <Grid x:Name="TabPageSystem"
+                              Visibility="Hidden"
+                              Opacity="0"
+                              IsHitTestVisible="False"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform x:Name="TabSystemScale" ScaleX="0.985" ScaleY="0.985" />
+                                    <TranslateTransform x:Name="TabSystemTranslate" X="0" />
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <controls:SystemMonitorView />
+                        </Grid>
+
+                        <!-- Tab 3: Persistent Temporary File Shelf -->
+                        <Grid x:Name="TabPageShelf"
+                              Visibility="Hidden"
+                              Opacity="0"
+                              IsHitTestVisible="False"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform x:Name="TabShelfScale" ScaleX="0.985" ScaleY="0.985" />
+                                    <TranslateTransform x:Name="TabShelfTranslate" X="0" />
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <controls:ShelfView />
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
