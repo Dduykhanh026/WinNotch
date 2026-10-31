@@ -44,4 +44,22 @@ public partial class DashboardView : UserControl
             e.Handled = true;
         }
     }
+
+    private void OnAudioDeviceRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is MainNotchViewModel vm)
+        {
+            vm.OpenSoundOutputSettingsCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void OnTimerWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (DataContext is MainNotchViewModel vm)
+        {
+            vm.StepTimerMinutes(e.Delta > 0 ? 1 : -1);
+            e.Handled = true;
+        }
+    }
 }

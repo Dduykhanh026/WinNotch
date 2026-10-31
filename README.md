@@ -7,6 +7,7 @@ Xem kiến trúc & quyết định kỹ thuật tại [`SPEC.md`](./SPEC.md).
 ## Tính năng chính
 
 - **Dynamic Notch bo góc liên tục Apple $G^2$ (`#050507`):** Tiệp hoàn toàn với mép trên màn hình (`Y = 0`), chuyển động lò xo vật lý 60–240Hz (`SpringAnimator` + chuyển Tab lướt lò xo `ActiveTabPill`, `0% CPU` khi đứng yên).
+- **Hiệu ứng Nhận Thông Báo chuẩn Apple Dynamic Island (`424 × 80`, `R = 24`):** Thẻ thông báo nền đen tuyền OLED (`#050507`) thuần chất iOS không viền màu thừa, bắt thông báo kép không cần MSIX (`UserNotificationListener` + `SetWinEventHook` tức thời + `RegisterShellHookWindow` `HSHELL_FLASH` cho Zalo PC / Telegram / Discord), tự trích xuất Icon gốc `64×64`, hỗ trợ giữ chuột đọc lâu, nhấp mở thẳng ứng dụng nguồn và chế độ ẩn nội dung riêng tư khi thuyết trình.
 - **Hiệu ứng Face ID 1:1 iOS Dynamic Island (`LAUIPearlGlyphView`):** Tự động bung khung vuông OLED `156 × 148` ngay khi mở khóa Windows (`WTSRegisterSessionNotification`), tái hiện trọn vẹn 4 pha: gương mặt Face ID → 3 vòng quỹ đạo 3D Pearl Rings xoay chiều sâu Z → khóa khớp vòng tròn → tự vẽ dấu tích xanh `#32D74B`.
 - **Tab `Điều khiển` (macOS Sequoia Control Center):**
   - **Thẻ Trái — Trình phát nhạc cố định:** Đồng bộ SMTC (Spotify, Apple Music, YouTube/Chrome/Edge, VLC) kèm **Ambient Album Glow**, **5 cột sóng âm đối xứng** theo phổ FFT thời gian thực và khung chờ 1:1 mở nhanh trình phát nhạc mà không nhảy bố cục.

@@ -134,6 +134,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
@@ -147,9 +148,55 @@
                                        FontSize="11"
                                        FontWeight="Medium"
                                        VerticalAlignment="Center" />
+
+                            <!-- 19px Inline Pill Button: Dọn RAM -->
+                            <Button Command="{Binding OptimizeRamCommand}"
+                                    Height="19"
+                                    Margin="8,0,0,0"
+                                    Padding="6,0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    ToolTip="Tối ưu bộ nhớ RAM User-Mode (EmptyWorkingSet)">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <controls:SquircleBorder x:Name="PillBd"
+                                                                 CornerRadius="5"
+                                                                 Background="#18FFFFFF"
+                                                                 BorderBrush="#24FFFFFF"
+                                                                 BorderThickness="1"
+                                                                 Padding="{TemplateBinding Padding}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <controls:IconsaxIcon Kind="Broom"
+                                                                      Size="10"
+                                                                      Foreground="{Binding RamOptimizedButtonBrush}"
+                                                                      Margin="0,0,4,0"
+                                                                      VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding RamOptimizedButtonText}"
+                                                           Typography.NumeralAlignment="Tabular"
+                                                           Foreground="{Binding RamOptimizedButtonBrush}"
+                                                           FontSize="9.5"
+                                                           FontWeight="Medium"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </controls:SquircleBorder>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="PillBd" Property="Background" Value="#2BFFFFFF" />
+                                                <Setter TargetName="PillBd" Property="BorderBrush" Value="#3EFFFFFF" />
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="PillBd" Property="Background" Value="#38FFFFFF" />
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Opacity" Value="0.5" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                         </StackPanel>
 
-                        <TextBlock Grid.Column="1"
+                        <TextBlock Grid.Column="2"
                                    Text="{Binding SysRamDetailText}"
                                    Typography.NumeralAlignment="Tabular"
                                    Foreground="{StaticResource TextSecondaryBrush}"
@@ -427,19 +474,51 @@
                     <StackPanel Grid.Column="1"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                ToolTip="Thời gian máy tính đã hoạt động liên tục (Uptime)">
-                        <controls:IconsaxIcon Kind="Timer"
-                                              Size="11"
-                                              Foreground="#7F8BA3"
-                                              Margin="0,0,4,0"
-                                              VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding SysUptimeText}"
-                                   Typography.NumeralAlignment="Tabular"
-                                   Foreground="#94A0B8"
-                                   FontSize="10.2"
-                                   FontWeight="Regular"
-                                   VerticalAlignment="Center" />
+                                VerticalAlignment="Center">
+                        <!-- Battery Status Detail (Laptop / Battery device) -->
+                        <StackPanel Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding HasBatteryDisplay, Converter={StaticResource BoolToVis}}">
+                            <StackPanel.ToolTip>
+                                <ToolTip Background="#0E1017" BorderBrush="#26FFFFFF" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding BatteryStatusDetail}" Foreground="#F7F8FC" FontWeight="SemiBold" FontSize="11" />
+                                        <TextBlock Text="{Binding SysUptimeText, StringFormat='{}Thời gian máy chạy (Uptime): {0}'}" Foreground="#94A0B8" FontSize="10.2" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                </ToolTip>
+                            </StackPanel.ToolTip>
+                            <controls:IconsaxIcon Kind="{Binding BatteryIcon}"
+                                                  Size="11.5"
+                                                  Foreground="#34D399"
+                                                  Margin="0,0,4,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding BatteryStatusDetail}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#94A0B8"
+                                       FontSize="10.2"
+                                       FontWeight="Medium"
+                                       MaxWidth="130"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- Desktop Uptime Fallback (No battery) -->
+                        <StackPanel Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding HasBatteryDisplay, Converter={StaticResource InvBoolToVis}}"
+                                    ToolTip="Thời gian máy tính đã hoạt động liên tục (Uptime)">
+                            <controls:IconsaxIcon Kind="Timer"
+                                                  Size="11"
+                                                  Foreground="#7F8BA3"
+                                                  Margin="0,0,4,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SysUptimeText}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Foreground="#94A0B8"
+                                       FontSize="10.2"
+                                       FontWeight="Regular"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
                     </StackPanel>
 
                     <Button Grid.Column="2"

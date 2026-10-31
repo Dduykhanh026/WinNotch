@@ -1,0 +1,148 @@
+<Window x:Class="WinNotch.Views.ColorPickerOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WinNotch Color Picker"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="#01000000"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        ResizeMode="NoResize"
+        Cursor="Cross"
+        FontFamily="{StaticResource AppleFontFamily}"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
+        KeyDown="OnWindowKeyDown"
+        KeyUp="OnWindowKeyUp"
+        PreviewMouseMove="OnWindowMouseMove"
+        PreviewMouseLeftButtonDown="OnWindowMouseLeftButtonDown"
+        PreviewMouseRightButtonDown="OnWindowMouseRightButtonDown">
+
+    <Grid x:Name="RootGrid" ClipToBounds="True">
+        <!-- 1. Frozen Screenshot Background Layer -->
+        <Image x:Name="ScreenFreezeImage"
+               Stretch="Fill"
+               HorizontalAlignment="Stretch"
+               VerticalAlignment="Stretch"
+               IsHitTestVisible="False"
+               RenderOptions.BitmapScalingMode="NearestNeighbor" />
+
+        <!-- 2. Overlay Canvas for Floating Card Placement -->
+        <Canvas x:Name="OverlayCanvas" IsHitTestVisible="False">
+            <!-- Floating Magnifier Card (140 x 168 DIPs) -->
+            <Border x:Name="MagnifierCard"
+                    Width="140"
+                    Height="168"
+                    Background="#0A0B0F"
+                    BorderBrush="#2EFFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="16">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24"
+                                      ShadowDepth="4"
+                                      Direction="270"
+                                      Color="#000000"
+                                      Opacity="0.55" />
+                </Border.Effect>
+
+                <Grid Margin="14,12,14,12">
+                    <Grid.RowDefinitions>
+                        <!-- Row 0: 11x11 Magnifier Grid (110x110) -->
+                        <RowDefinition Height="110" />
+                        <!-- Row 1: Spacing -->
+                        <RowDefinition Height="8" />
+                        <!-- Row 2: Swatch + Hex/RGB Readout Panel -->
+                        <RowDefinition Height="26" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Magnifier Viewport -->
+                    <Grid Grid.Row="0" Width="110" Height="110" ClipToBounds="True">
+                        <!-- Rounded background frame -->
+                        <Border CornerRadius="8" ClipToBounds="True" Background="#000000">
+                            <!-- 11x11 Magnified Pixels (Upscaled to 110x110) -->
+                            <Image x:Name="MagnifierImage"
+                                   Width="110"
+                                   Height="110"
+                                   Stretch="Fill"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                   RenderOptions.EdgeMode="Aliased" />
+                        </Border>
+
+                        <!-- Subtle 10x10 Grid Lines Overlay -->
+                        <Border CornerRadius="8" BorderBrush="#1FFFFFFF" BorderThickness="0.5" IsHitTestVisible="False">
+                            <Path Stroke="#12FFFFFF" StrokeThickness="0.5" IsHitTestVisible="False"
+                                  Data="M10,0 L10,110 M20,0 L20,110 M30,0 L30,110 M40,0 L40,110 M50,0 L50,110 M60,0 L60,110 M70,0 L70,110 M80,0 L80,110 M90,0 L90,110 M100,0 L100,110
+                                        M0,10 L110,10 M0,20 L110,20 M0,30 L110,30 M0,40 L110,40 M0,50 L110,50 M0,60 L110,60 M0,70 L110,70 M0,80 L110,80 M0,90 L110,90 M0,100 L110,100" />
+                        </Border>
+
+                        <!-- Dynamic Contrast Center Reticle (Cell 5,5: X=50..60, Y=50..60) -->
+                        <!-- Outer 12x12 Frame -->
+                        <Border x:Name="ReticleOuter"
+                                Width="12"
+                                Height="12"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                BorderThickness="1"
+                                BorderBrush="#000000"
+                                IsHitTestVisible="False" />
+                        <!-- Inner 10x10 Frame (Exact 1px cell) -->
+                        <Border x:Name="ReticleInner"
+                                Width="10"
+                                Height="10"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                BorderThickness="1"
+                                BorderBrush="#FFFFFF"
+                                IsHitTestVisible="False" />
+
+                        <!-- Crosshair Tick Marks -->
+                        <Line x:Name="TickTop" X1="55" Y1="42" X2="55" Y2="48" Stroke="#FFFFFF" StrokeThickness="1" />
+                        <Line x:Name="TickBottom" X1="55" Y1="62" X2="55" Y2="68" Stroke="#FFFFFF" StrokeThickness="1" />
+                        <Line x:Name="TickLeft" X1="42" Y1="55" X2="48" Y2="55" Stroke="#FFFFFF" StrokeThickness="1" />
+                        <Line x:Name="TickRight" X1="62" Y1="55" X2="68" Y2="55" Stroke="#FFFFFF" StrokeThickness="1" />
+                    </Grid>
+
+                    <!-- Direct Readout Panel -->
+                    <Grid Grid.Row="2" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Circular Color Swatch -->
+                        <Border Grid.Column="0"
+                                Width="20"
+                                Height="20"
+                                CornerRadius="10"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                BorderThickness="1"
+                                BorderBrush="#33FFFFFF">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="SwatchBrush" Color="#FFFFFF" />
+                            </Border.Background>
+                        </Border>
+
+                        <!-- Hex & RGB Text -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="HexCodeText"
+                                       Text="#FFFFFF"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Typography.NumeralAlignment="Tabular" />
+                            <TextBlock x:Name="RgbCodeText"
+                                       Text="RGB(255, 255, 255)"
+                                       FontSize="9.5"
+                                       FontWeight="Regular"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Typography.NumeralAlignment="Tabular"
+                                       Margin="0,1,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Canvas>
+    </Grid>
+</Window>

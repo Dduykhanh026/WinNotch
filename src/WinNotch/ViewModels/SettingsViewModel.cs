@@ -15,6 +15,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly SettingsService _settingsService;
     private readonly Action _closeWindowAction;
     private readonly Action? _previewFaceIdAction;
+    private readonly Action<bool>? _previewNotificationAction;
+    private readonly Action? _previewAgentHudAction;
 
     public ObservableCollection<MonitorOption> Monitors { get; } = [];
     public ObservableCollection<SpringPresetOption> SpringPresets { get; } =
@@ -37,9 +39,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _enableBatteryHud = true;
     [ObservableProperty] private bool _enableTrackChangeHud = true;
     [ObservableProperty] private bool _enableUnlockFaceIdHud = true;
+    [ObservableProperty] private bool _enableNotificationHud = true;
+    [ObservableProperty] private bool _hideNotificationPreviewText;
+    [ObservableProperty] private bool _respectWindowsDoNotDisturb;
     [ObservableProperty] private bool _showCollapsedNetworkSpeed;
     [ObservableProperty] private bool _autoRemoveShelfItemAfterDrag;
     [ObservableProperty] private bool _startWithWindows;
+    [ObservableProperty] private bool _enableCollapsedScrollGestures = true;
+    [ObservableProperty] private bool _enableAudioDeviceHud = true;
+    [ObservableProperty] private bool _enableCapsLockHud = true;
+    [ObservableProperty] private bool _enableAgentMonitor = true;
+    [ObservableProperty] private bool _enableAgentApprovalHud = true;
+    [ObservableProperty] private bool _defaultOpenAgentsTab = true;
 
     public string StoragePathDisplay => _settingsService.DataDirectory;
     public string ModeBadgeText => _settingsService.IsPortableMode ? "Chế độ Portable (100% Offline)" : "Bản cài đặt chuẩn (100% Offline)";
@@ -47,11 +58,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(
         SettingsService settingsService,
         Action closeWindowAction,
-        Action? previewFaceIdAction = null)
+        Action? previewFaceIdAction = null,
+        Action<bool>? previewNotificationAction = null,
+        Action? previewAgentHudAction = null)
     {
         _settingsService = settingsService;
         _closeWindowAction = closeWindowAction;
         _previewFaceIdAction = previewFaceIdAction;
+        _previewNotificationAction = previewNotificationAction;
+        _previewAgentHudAction = previewAgentHudAction;
 
         Monitors.Add(new MonitorOption(string.Empty, "Tự động theo Màn hình chính (Primary)"));
         foreach (MonitorDescriptor m in WindowStyles.GetMonitors())
@@ -79,9 +94,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         EnableBatteryHud = s.EnableBatteryHud;
         EnableTrackChangeHud = s.EnableTrackChangeHud;
         EnableUnlockFaceIdHud = s.EnableUnlockFaceIdHud;
+        EnableNotificationHud = s.EnableNotificationHud;
+        HideNotificationPreviewText = s.HideNotificationPreviewText;
+        RespectWindowsDoNotDisturb = s.RespectWindowsDoNotDisturb;
         ShowCollapsedNetworkSpeed = s.ShowCollapsedNetworkSpeed;
         AutoRemoveShelfItemAfterDrag = s.AutoRemoveShelfItemAfterDrag;
         StartWithWindows = s.StartWithWindows;
+        EnableCollapsedScrollGestures = s.EnableCollapsedScrollGestures;
+        EnableAudioDeviceHud = s.EnableAudioDeviceHud;
+        EnableCapsLockHud = s.EnableCapsLockHud;
+        EnableAgentMonitor = s.EnableAgentMonitor;
+        EnableAgentApprovalHud = s.EnableAgentApprovalHud;
+        DefaultOpenAgentsTab = s.DefaultOpenAgentsTab;
     }
 
     [RelayCommand]
@@ -100,9 +124,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         updated.EnableBatteryHud = EnableBatteryHud;
         updated.EnableTrackChangeHud = EnableTrackChangeHud;
         updated.EnableUnlockFaceIdHud = EnableUnlockFaceIdHud;
+        updated.EnableNotificationHud = EnableNotificationHud;
+        updated.HideNotificationPreviewText = HideNotificationPreviewText;
+        updated.RespectWindowsDoNotDisturb = RespectWindowsDoNotDisturb;
         updated.ShowCollapsedNetworkSpeed = ShowCollapsedNetworkSpeed;
         updated.AutoRemoveShelfItemAfterDrag = AutoRemoveShelfItemAfterDrag;
         updated.StartWithWindows = StartWithWindows;
+        updated.EnableCollapsedScrollGestures = EnableCollapsedScrollGestures;
+        updated.EnableAudioDeviceHud = EnableAudioDeviceHud;
+        updated.EnableCapsLockHud = EnableCapsLockHud;
+        updated.EnableAgentMonitor = EnableAgentMonitor;
+        updated.EnableAgentApprovalHud = EnableAgentApprovalHud;
+        updated.DefaultOpenAgentsTab = DefaultOpenAgentsTab;
 
         _settingsService.Save(updated);
         _closeWindowAction();
@@ -122,6 +155,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [RelayCommand]
     private void PreviewFaceId() => _previewFaceIdAction?.Invoke();
+
+    [RelayCommand]
+    private void PreviewNotification() => _previewNotificationAction?.Invoke(HideNotificationPreviewText);
+
+    [RelayCommand]
+    private void PreviewAgentHud() => _previewAgentHudAction?.Invoke();
 
     [RelayCommand]
     private void Cancel() => _closeWindowAction();

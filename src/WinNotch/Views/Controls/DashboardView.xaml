@@ -51,12 +51,13 @@
 
                     <Button Grid.Column="2"
                             Style="{StaticResource NotchGhostButton}"
-                            Command="{Binding OpenSoundOutputSettingsCommand}"
+                            Command="{Binding CycleAudioOutputCommand}"
+                            PreviewMouseRightButtonUp="OnAudioDeviceRightClick"
                             Height="20"
                             Padding="6,0"
-                            ToolTip="Đổi thiết bị đầu ra âm thanh (Cài đặt Âm thanh Windows)">
+                            ToolTip="Click trái: Đổi Loa / Tai nghe 1 chạm&#x0a;Click phải: Cài đặt Âm thanh Windows">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <controls:IconsaxIcon Kind="Headphone"
+                            <controls:IconsaxIcon Kind="{Binding OutputDeviceIcon}"
                                                   Size="11.5"
                                                   Foreground="#93C5FD"
                                                   Margin="0,0,4.5,0"
@@ -151,7 +152,9 @@
                                      Margin="0,10,0,0"
                                      CornerRadius="9.5"
                                      BorderThickness="1"
-                                     Padding="10,6">
+                                     Padding="10,6"
+                                     PreviewMouseWheel="OnTimerWheel"
+                                     ToolTip="Lăn chuột để tăng/giảm ±1 phút">
                 <controls:SquircleBorder.Style>
                     <Style TargetType="controls:SquircleBorder">
                         <Setter Property="Background" Value="#15FFFFFF" />
@@ -237,35 +240,116 @@
                 </Grid>
             </controls:SquircleBorder>
 
-            <!-- Row 3: 3 Equal Control Center Quick Action Tiles -->
+            <!-- Row 3: 4 Balanced Control Center Quick Action Tiles (Height=33) -->
             <Grid Grid.Row="3" Height="33" VerticalAlignment="Bottom">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="7" />
+                    <ColumnDefinition Width="6" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="7" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="6" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
+                <!-- 1. Caffeine Mode -->
                 <Button Grid.Column="0"
-                        Style="{StaticResource NotchPillButton}"
-                        Command="{Binding OpenSoundOutputSettingsCommand}"
+                        Command="{Binding ToggleCaffeineCommand}"
                         Padding="4,0"
-                        ToolTip="Mở cài đặt Đầu ra Âm thanh Windows">
+                        ToolTip="Giữ màn hình luôn sáng, chống ngủ máy (Caffeine)">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource NotchPillButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCaffeineActive}" Value="True">
+                                    <Setter Property="Background" Value="#26F59E0B" />
+                                    <Setter Property="BorderBrush" Value="#4DF59E0B" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <controls:IconsaxIcon Kind="Headphone"
+                        <controls:IconsaxIcon Kind="Coffee"
                                               Size="12.5"
-                                              Foreground="#93C5FD"
-                                              Margin="0,0,5,0"
+                                              Foreground="#F59E0B"
+                                              Margin="0,0,4.5,0"
                                               VerticalAlignment="Center" />
-                        <TextBlock Text="Đầu ra"
+                        <TextBlock Text="Giữ sáng"
                                    FontSize="10.6"
                                    FontWeight="Medium"
                                    VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
+                <!-- 2. System-wide Microphone Toggle -->
                 <Button Grid.Column="2"
+                        Command="{Binding ToggleMicMuteCommand}"
+                        Padding="4,0"
+                        ToolTip="Bật / Tắt Micro toàn hệ thống (Alt + M)">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource NotchPillButton}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMicMuted}" Value="True">
+                                    <Setter Property="Background" Value="#2BFF453A" />
+                                    <Setter Property="BorderBrush" Value="#52FF453A" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <controls:IconsaxIcon Size="12.5"
+                                              Margin="0,0,4.5,0"
+                                              VerticalAlignment="Center">
+                            <controls:IconsaxIcon.Style>
+                                <Style TargetType="controls:IconsaxIcon">
+                                    <Setter Property="Kind" Value="Microphone" />
+                                    <Setter Property="Foreground" Value="#30D158" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMicMuted}" Value="True">
+                                            <Setter Property="Kind" Value="MicrophoneSlash" />
+                                            <Setter Property="Foreground" Value="#FF453A" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </controls:IconsaxIcon.Style>
+                        </controls:IconsaxIcon>
+                        <TextBlock FontSize="10.6"
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="Micro" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMicMuted}" Value="True">
+                                            <Setter Property="Text" Value="Tắt Mic" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Button>
+
+                <!-- 3. Screen Color Picker -->
+                <Button Grid.Column="4"
+                        Style="{StaticResource NotchPillButton}"
+                        Command="{Binding StartColorPickerCommand}"
+                        Padding="4,0"
+                        ToolTip="Chấm mã màu màn hình #HEX (Alt + C)">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <controls:IconsaxIcon Kind="Colorfilter"
+                                              Size="12.5"
+                                              Foreground="#C084FC"
+                                              Margin="0,0,4.5,0"
+                                              VerticalAlignment="Center" />
+                        <TextBlock Text="Chấm màu"
+                                   FontSize="10.6"
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <!-- 4. Screen Snip -->
+                <Button Grid.Column="6"
                         Style="{StaticResource NotchPillButton}"
                         Command="{Binding TriggerScreenSnipCommand}"
                         Padding="4,0"
@@ -274,27 +358,9 @@
                         <controls:IconsaxIcon Kind="Scan"
                                               Size="12.5"
                                               Foreground="#34D399"
-                                              Margin="0,0,5,0"
+                                              Margin="0,0,4.5,0"
                                               VerticalAlignment="Center" />
                         <TextBlock Text="Chụp vùng"
-                                   FontSize="10.6"
-                                   FontWeight="Medium"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-
-                <Button Grid.Column="4"
-                        Style="{StaticResource NotchPillButton}"
-                        Command="{Binding LockWorkstationCommand}"
-                        Padding="4,0"
-                        ToolTip="Khóa nhanh màn hình Windows (Win + L)">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <controls:IconsaxIcon Kind="Lock"
-                                              Size="12.5"
-                                              Foreground="#FBBF24"
-                                              Margin="0,0,5,0"
-                                              VerticalAlignment="Center" />
-                        <TextBlock Text="Khóa máy"
                                    FontSize="10.6"
                                    FontWeight="Medium"
                                    VerticalAlignment="Center" />

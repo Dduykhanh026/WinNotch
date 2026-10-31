@@ -20,8 +20,15 @@ public sealed class InputHookService : IDisposable
     private bool _dragCandidateStartedOutsideTop;
     private bool _isDragZoneTriggered;
     private bool _isGhostActive;
+    private bool _isAltNDown;
+    private bool _isAltMDown;
+    private bool _isAltCDown;
+    private bool _isCapsLockDown;
 
     public event Action? ToggleHotkeyPressed;
+    public event Action? MicMuteHotkeyPressed;
+    public event Action? ColorPickerHotkeyPressed;
+    public event Action<bool>? CapsLockToggled;
     public event Action<int, bool>? VolumeKeyIntercepted; // (deltaPercent, toggleMute)
     public event Action<bool>? GhostModeChanged;
     public event Action<bool>? DragSensorZoneChanged;
@@ -60,18 +67,83 @@ public sealed class InputHookService : IDisposable
         {
             int msg = wParam.ToInt32();
             bool isKeyDown = msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN;
+            bool isKeyUp = msg == NativeMethods.WM_KEYUP || msg == NativeMethods.WM_SYSKEYUP;
             var kb = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
+
+            if (isKeyUp)
+            {
+                if (kb.vkCode == NativeMethods.VK_M) _isAltMDown = false;
+                else if (kb.vkCode == NativeMethods.VK_C) _isAltCDown = false;
+                else if (kb.vkCode == NativeMethods.VK_N) _isAltNDown = false;
+                else if (kb.vkCode == NativeMethods.VK_MENU)
+                {
+                    _isAltMDown = false;
+                    _isAltCDown = false;
+                    _isAltNDown = false;
+                }
+                else if (kb.vkCode == NativeMethods.VK_CAPITAL)
+                {
+                    _isCapsLockDown = false;
+                }
+            }
 
             if (isKeyDown)
             {
-                // 1. Global Hotkey Alt + N
-                if (kb.vkCode == NativeMethods.VK_N && (NativeMethods.GetAsyncKeyState(NativeMethods.VK_MENU) & 0x8000) != 0)
+                bool isAltPressed = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_MENU) & 0x8000) != 0 || (kb.flags & 0x20) != 0;
+
+                // 1. Global Hotkey Alt + N (Toggle Expand with auto-repeat guard)
+                if (kb.vkCode == NativeMethods.VK_N && isAltPressed)
                 {
-                    Application.Current?.Dispatcher.BeginInvoke(() => ToggleHotkeyPressed?.Invoke());
+                    if (!_isAltNDown)
+                    {
+                        _isAltNDown = true;
+                        Application.Current?.Dispatcher.BeginInvoke(() => ToggleHotkeyPressed?.Invoke());
+                    }
                     return new IntPtr(1);
                 }
 
-                // 2. Windows 11 Volume OSD Replacement (user-mode WH_KEYBOARD_LL)
+                // 2. Global Hotkey Alt + M (System Microphone Mute Toggle)
+                if (kb.vkCode == NativeMethods.VK_M && isAltPressed)
+                {
+                    if (!_isAltMDown)
+                    {
+                        _isAltMDown = true;
+                        Application.Current?.Dispatcher.BeginInvoke(() => MicMuteHotkeyPressed?.Invoke());
+                    }
+                    return new IntPtr(1);
+                }
+
+                // 3. Global Hotkey Alt + C (Screen Color Picker)
+                if (kb.vkCode == NativeMethods.VK_C && isAltPressed)
+                {
+                    if (!_isAltCDown)
+                    {
+                        _isAltCDown = true;
+                        Application.Current?.Dispatcher.BeginInvoke(() => ColorPickerHotkeyPressed?.Invoke());
+                    }
+                    return new IntPtr(1);
+                }
+
+                // 4. Caps Lock Status Notification (VK_CAPITAL)
+                // Note: Do NOT swallow the key (allow CallNextHookEx to propagate to OS and apps)
+                if (kb.vkCode == NativeMethods.VK_CAPITAL)
+                {
+                    if (!_isCapsLockDown)
+                    {
+                        _isCapsLockDown = true;
+                        if (_settingsService.Current.EnableCapsLockHud)
+                        {
+                            Application.Current?.Dispatcher.BeginInvoke(() =>
+                            {
+                                short state = NativeMethods.GetKeyState(NativeMethods.VK_CAPITAL);
+                                bool isToggledOn = (state & 0x0001) != 0;
+                                CapsLockToggled?.Invoke(isToggledOn);
+                            });
+                        }
+                    }
+                }
+
+                // 5. Windows 11 Volume OSD Replacement (user-mode WH_KEYBOARD_LL)
                 AppSettings cfg = _settingsService.Current;
                 if (cfg.ReplaceSystemVolumeOsd)
                 {

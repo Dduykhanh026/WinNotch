@@ -21,6 +21,9 @@ public partial class App : Application
     private TimerService? _timerService;
     private PrivacyService? _privacyService;
     private SystemMonitorService? _systemMonitorService;
+    private NotificationService? _notificationService;
+    private ColorPickerService? _colorPickerService;
+    private AgentMonitorService? _agentMonitorService;
     private TrayIconService? _trayIconService;
 
     private NotchWindow? _notchWindow;
@@ -46,6 +49,9 @@ public partial class App : Application
         _timerService = new TimerService();
         _privacyService = new PrivacyService(_settingsService);
         _systemMonitorService = new SystemMonitorService(_settingsService);
+        _notificationService = new NotificationService(_settingsService);
+        _colorPickerService = new ColorPickerService(_stateMachine);
+        _agentMonitorService = new AgentMonitorService(_settingsService);
 
         var mainVm = new MainNotchViewModel(
             _settingsService,
@@ -57,6 +63,9 @@ public partial class App : Application
             _timerService,
             _privacyService,
             _systemMonitorService,
+            _notificationService,
+            _colorPickerService,
+            _agentMonitorService,
             OpenSettingsWindow);
 
         _mainViewModel = mainVm;
@@ -64,12 +73,16 @@ public partial class App : Application
             _settingsService,
             _stateMachine,
             mainVm,
+            _notificationService,
             targetMonitor,
             () => _fullscreenService?.RefreshNow());
         _notchWindow.Show();
 
         // Wire global hooks & detectors
         _inputHookService.ToggleHotkeyPressed += () => _stateMachine.ToggleExpandViaHotkey();
+        _inputHookService.MicMuteHotkeyPressed += () => _audioService.ToggleMicrophoneMute(showHud: true);
+        _inputHookService.ColorPickerHotkeyPressed += () => _colorPickerService.StartColorPicker();
+        _inputHookService.CapsLockToggled += isOn => mainVm.EmitCapsLockHud(isOn);
         _inputHookService.GhostModeChanged += active => _stateMachine.SetGhostPassthrough(active);
         _inputHookService.DragSensorZoneChanged += active => _stateMachine.SetDragZoneActive(active);
         _inputHookService.VolumeKeyIntercepted += (delta, mute) => _audioService.StepVolume(delta, mute);
@@ -84,10 +97,18 @@ public partial class App : Application
         _mediaService.Start();
         _privacyService.Start();
         _systemMonitorService.Start();
+        _notificationService.Start(_notchWindow.WindowHandle);
+        _agentMonitorService.Start();
         _inputHookService.Start();
         _fullscreenService.Start(_notchWindow.WindowHandle);
 
-        _trayIconService = new TrayIconService(_stateMachine, OpenSettingsWindow, ShutdownApplication);
+        _trayIconService = new TrayIconService(
+            _stateMachine,
+            _displayPowerService,
+            _audioService,
+            _colorPickerService,
+            OpenSettingsWindow,
+            ShutdownApplication);
         _trayIconService.Start();
 
         // Listen for second-launch signal to unhide & expand Notch immediately
@@ -126,11 +147,23 @@ public partial class App : Application
             return;
         }
 
-        _settingsWindow = new SettingsWindow(_settingsService, () =>
-        {
-            _fullscreenService?.RefreshNow();
-            _mainViewModel?.TriggerFaceIdUnlockHud();
-        });
+        _settingsWindow = new SettingsWindow(
+            _settingsService,
+            previewFaceIdAction: () =>
+            {
+                _fullscreenService?.RefreshNow();
+                _mainViewModel?.TriggerFaceIdUnlockHud();
+            },
+            previewNotificationAction: hidePreview =>
+            {
+                _fullscreenService?.RefreshNow();
+                _mainViewModel?.TriggerPreviewNotificationHud(hidePreview);
+            },
+            previewAgentHudAction: () =>
+            {
+                _fullscreenService?.RefreshNow();
+                _mainViewModel?.TriggerPreviewAgentHud();
+            });
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
         _settingsWindow.Activate();
@@ -149,6 +182,9 @@ public partial class App : Application
         _timerService?.Dispose();
         _privacyService?.Dispose();
         _systemMonitorService?.Dispose();
+        _notificationService?.Dispose();
+        _colorPickerService?.Dispose();
+        _agentMonitorService?.Dispose();
 
         _settingsWindow?.Close();
         _notchWindow?.Close();
@@ -166,6 +202,9 @@ public partial class App : Application
         _timerService?.Dispose();
         _privacyService?.Dispose();
         _systemMonitorService?.Dispose();
+        _notificationService?.Dispose();
+        _colorPickerService?.Dispose();
+        _agentMonitorService?.Dispose();
         base.OnExit(e);
     }
 }

@@ -4,9 +4,10 @@
              xmlns:controls="clr-namespace:WinNotch.Views.Controls"
              PreviewMouseWheel="OnHudMouseWheel">
 
-    <Grid VerticalAlignment="Center" Margin="0,0,0,0.5">
+    <Grid VerticalAlignment="Stretch">
         <!-- 1. Slider HUD (Volume / Brightness): 18px concentric horizontal inset -->
-        <Grid Margin="18,0"
+        <Grid Margin="18,0,18,0.5"
+              VerticalAlignment="Center"
               Visibility="{Binding IsSliderHudVisible, Converter={StaticResource BoolToVis}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="24" />
@@ -14,12 +15,20 @@
                 <ColumnDefinition Width="54" />
             </Grid.ColumnDefinitions>
 
-            <controls:IconsaxIcon Grid.Column="0"
-                                  Kind="{Binding ActiveHud.Icon}"
-                                  Size="18"
-                                  Foreground="{Binding HudAccentBrush}"
-                                  VerticalAlignment="Center"
-                                  HorizontalAlignment="Left" />
+            <Grid x:Name="SliderIconHost"
+                  Grid.Column="0"
+                  VerticalAlignment="Center"
+                  HorizontalAlignment="Left"
+                  RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <ScaleTransform x:Name="SliderIconScale" ScaleX="1" ScaleY="1" />
+                </Grid.RenderTransform>
+                <controls:IconsaxIcon Kind="{Binding ActiveHud.Icon}"
+                                      Size="18"
+                                      Foreground="{Binding HudAccentBrush}"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Left" />
+            </Grid>
 
             <Slider Grid.Column="1"
                     Style="{StaticResource NotchSleekSlider}"
@@ -43,7 +52,8 @@
         </Grid>
 
         <!-- 2. Non-Slider Status / Track-Change HUD (30x30 r=7.2 + pad=10 -> R=18 concentric) -->
-        <Grid Margin="10,0,18,0"
+        <Grid Margin="10,0,18,0.5"
+              VerticalAlignment="Center"
               Visibility="{Binding IsStandardStatusHudVisible, Converter={StaticResource BoolToVis}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -51,48 +61,117 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- Optional True G2 Continuous Squircle Album Art Thumbnail for TrackChange (30x30, r=7.2 ~24%) -->
-            <controls:SquircleBorder Grid.Column="0"
-                                     Width="30"
-                                     Height="30"
-                                     CornerRadius="7.2"
-                                     BorderBrush="#32FFFFFF"
-                                     BorderThickness="0.8"
-                                     Margin="0,0,10,0"
-                                     RenderOptions.BitmapScalingMode="HighQuality"
-                                     Visibility="{Binding ActiveHud.Thumbnail, Converter={StaticResource NullToVis}}">
-                <controls:SquircleBorder.Background>
-                    <ImageBrush ImageSource="{Binding ActiveHud.Thumbnail}"
-                                Stretch="UniformToFill"
-                                RenderOptions.BitmapScalingMode="HighQuality" />
-                </controls:SquircleBorder.Background>
-            </controls:SquircleBorder>
+            <!-- Zone 1: Visual Host (Swatch, Album Art, or Icon) with Elastic Arrival Pulse -->
+            <Grid x:Name="StatusVisualHost"
+                  Grid.Column="0"
+                  VerticalAlignment="Center"
+                  RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <ScaleTransform x:Name="StatusVisualScale" ScaleX="1" ScaleY="1" />
+                </Grid.RenderTransform>
 
-            <controls:IconsaxIcon Grid.Column="0"
-                                  Kind="{Binding ActiveHud.Icon}"
-                                  Size="18"
-                                  Foreground="{Binding HudAccentBrush}"
-                                  Margin="8,0,10,0"
-                                  VerticalAlignment="Center"
-                                  Visibility="{Binding ActiveHud.Thumbnail, Converter={StaticResource NullToInvVis}}" />
+                <!-- True G2 squircle color swatch 24x24 for ColorPicked HUD -->
+                <controls:SquircleBorder Width="24"
+                                         Height="24"
+                                         CornerRadius="6.2"
+                                         Background="{Binding HudAccentBrush}"
+                                         BorderBrush="#45FFFFFF"
+                                         BorderThickness="0.8"
+                                         Margin="4,0,10,0"
+                                         VerticalAlignment="Center"
+                                         Visibility="{Binding IsHudColorSwatchVisible, Converter={StaticResource BoolToVis}}" />
 
-            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <!-- True G2 Continuous Squircle Album Art Thumbnail for TrackChange (30x30, r=7.2) -->
+                <controls:SquircleBorder Width="30"
+                                         Height="30"
+                                         CornerRadius="7.2"
+                                         BorderBrush="#32FFFFFF"
+                                         BorderThickness="0.8"
+                                         Margin="0,0,10,0"
+                                         RenderOptions.BitmapScalingMode="HighQuality"
+                                         Visibility="{Binding IsHudAlbumArtVisible, Converter={StaticResource BoolToVis}}">
+                    <controls:SquircleBorder.Background>
+                        <ImageBrush ImageSource="{Binding ActiveHud.Thumbnail}"
+                                    Stretch="UniformToFill"
+                                    RenderOptions.BitmapScalingMode="HighQuality" />
+                    </controls:SquircleBorder.Background>
+                </controls:SquircleBorder>
+
+                <!-- Standard Iconsax Icon -->
+                <controls:IconsaxIcon Kind="{Binding ActiveHud.Icon}"
+                                      Size="18"
+                                      Foreground="{Binding HudAccentBrush}"
+                                      Margin="8,0,10,0"
+                                      VerticalAlignment="Center"
+                                      Visibility="{Binding IsHudIconVisible, Converter={StaticResource BoolToVis}}" />
+            </Grid>
+
+            <!-- Zone 2: Title / Status Action Text Container with Arrival Bloom -->
+            <StackPanel x:Name="StatusTextContainer"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        RenderTransformOrigin="0.5,0.5">
+                <StackPanel.RenderTransform>
+                    <TranslateTransform x:Name="StatusTextTranslate" X="0" />
+                </StackPanel.RenderTransform>
+
                 <TextBlock Text="{Binding ActiveHud.Title}"
                            Foreground="{StaticResource TextPrimaryBrush}"
                            FontSize="12.2"
                            FontWeight="SemiBold"
-                           TextTrimming="CharacterEllipsis" />
+                           TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding IsHudColorSwatchVisible, Converter={StaticResource InvBoolToVis}}" />
+
+                <TextBlock Text="{Binding ActiveHud.ValueText}"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="12.2"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding IsHudColorSwatchVisible, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
 
-            <TextBlock Grid.Column="2"
-                       Text="{Binding ActiveHud.ValueText}"
-                       Foreground="{Binding HudAccentBrush}"
-                       FontSize="11.6"
-                       FontWeight="Regular"
-                       MaxWidth="130"
-                       Margin="10,0,0,0"
-                       TextTrimming="CharacterEllipsis"
-                       VerticalAlignment="Center" />
+            <!-- Zone 3: Right Readout (Capsule Mini Meter + ValueText OR #HEX Code) -->
+            <StackPanel Grid.Column="2"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Right"
+                        Margin="10,0,0,0">
+
+                <!-- Capsule mini meter 42x4.5px (CornerRadius 2.25) for AirPods / AudioDevice and Battery level -->
+                <Border Width="42"
+                        Height="4.5"
+                        CornerRadius="2.25"
+                        Background="#28FFFFFF"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0"
+                        Visibility="{Binding IsHudMiniMeterVisible, Converter={StaticResource BoolToVis}}">
+                    <Border HorizontalAlignment="Left"
+                            Width="{Binding HudMiniMeterWidth}"
+                            Height="4.5"
+                            CornerRadius="2.25"
+                            Background="{Binding HudAccentBrush}" />
+                </Border>
+
+                <!-- Standard Value Text -->
+                <TextBlock Text="{Binding ActiveHud.ValueText}"
+                           Foreground="{Binding HudAccentBrush}"
+                           FontSize="11.6"
+                           FontWeight="Regular"
+                           Typography.NumeralAlignment="Tabular"
+                           MaxWidth="130"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"
+                           Visibility="{Binding IsHudColorSwatchVisible, Converter={StaticResource InvBoolToVis}}" />
+
+                <!-- #HEX readout on right when IsHudColorSwatchVisible == True -->
+                <TextBlock Text="{Binding ActiveHud.Title}"
+                           Foreground="{Binding HudAccentBrush}"
+                           FontSize="12.0"
+                           FontWeight="SemiBold"
+                           Typography.NumeralAlignment="Tabular"
+                           VerticalAlignment="Center"
+                           Visibility="{Binding IsHudColorSwatchVisible, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
         </Grid>
 
         <!-- 3. Authentic iOS Dynamic Island Face ID Square HUD (156 x 148, R=36, Zero Text) -->
@@ -102,5 +181,146 @@
                                     VerticalAlignment="Center"
                                     PulseToken="{Binding FaceIdPulseToken}"
                                     Visibility="{Binding IsFaceIdHudVisible, Converter={StaticResource BoolToVis}}" />
+
+        <!-- 4. Apple Dynamic Island Notification Drop-Down Banner (424 x 80, R=24, Pure Pitch-Black OLED) -->
+        <Grid Background="Transparent"
+              Cursor="Hand"
+              ToolTip="Nhấp để mở ứng dụng • Chuột phải để đóng nhanh"
+              MouseLeftButtonUp="OnNotificationBannerLeftClick"
+              MouseRightButtonUp="OnNotificationBannerRightClick"
+              Visibility="{Binding IsNotificationHudVisible, Converter={StaticResource BoolToVis}}">
+
+            <!-- Concentric 3-Zone Banner Content (15px inset + r=10.8 Squircle -> R=24.0) -->
+            <Grid Margin="15,0,13,1" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Zone 1: 44x44 Pure Dark Frosted G2 Squircle App Icon -->
+                <Grid x:Name="NotifIconContainer"
+                      Grid.Column="0"
+                      Width="44"
+                      Height="44"
+                      Margin="0,0,12,0"
+                      VerticalAlignment="Center"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="NotifIconScale" ScaleX="1" ScaleY="1" />
+                    </Grid.RenderTransform>
+
+                    <!-- Fallback Dark Frosted Squircle when App has no bitmap icon -->
+                    <controls:SquircleBorder CornerRadius="10.8"
+                                             Background="#13FFFFFF"
+                                             BorderBrush="#1FFFFFFF"
+                                             BorderThickness="0.8"
+                                             Visibility="{Binding ActiveHud.Thumbnail, Converter={StaticResource NullToInvVis}}">
+                        <controls:IconsaxIcon Kind="{Binding ActiveHud.Icon}"
+                                              Size="19.5"
+                                              Foreground="{Binding HudAccentBrush}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                    </controls:SquircleBorder>
+
+                    <!-- High-DPI 64x64 App Icon inside Neutral Dark Frosted G2 Continuous Squircle -->
+                    <controls:SquircleBorder CornerRadius="10.8"
+                                             Background="#13FFFFFF"
+                                             BorderBrush="#1FFFFFFF"
+                                             BorderThickness="0.8"
+                                             Padding="5.5"
+                                             Visibility="{Binding ActiveHud.Thumbnail, Converter={StaticResource NullToVis}}">
+                        <Image Source="{Binding ActiveHud.Thumbnail}"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                    </controls:SquircleBorder>
+                </Grid>
+
+                <!-- Zone 2: Sender / Title + App Timestamp + 2-Line Body Preview -->
+                <StackPanel x:Name="NotifTextContainer"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            RenderTransformOrigin="0.5,0.5">
+                    <StackPanel.RenderTransform>
+                        <TranslateTransform x:Name="NotifTextTranslate" Y="0" />
+                    </StackPanel.RenderTransform>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding ActiveHud.Title}"
+                                   Foreground="#F8FAFF"
+                                   FontSize="12.8"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding NotificationMetaText}"
+                                   Foreground="#8D97AE"
+                                   FontSize="10.6"
+                                   FontWeight="Medium"
+                                   MaxWidth="146"
+                                   Margin="8,0,0,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <TextBlock Text="{Binding ActiveHud.BodyText}"
+                               Foreground="#C7D0E3"
+                               FontSize="11.4"
+                               FontWeight="Regular"
+                               LineHeight="15.0"
+                               LineStackingStrategy="BlockLineHeight"
+                               MaxHeight="30.5"
+                               Margin="0,2.5,0,0"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <!-- Zone 3: Quick Dismiss Squircle Pill (×) -->
+                <Button Grid.Column="2"
+                        Width="26"
+                        Height="26"
+                        Margin="10,0,0,0"
+                        VerticalAlignment="Center"
+                        Focusable="False"
+                        Cursor="Hand"
+                        ToolTip="Đóng thông báo"
+                        Click="OnDismissNotificationButtonClick">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <controls:SquircleBorder x:Name="CloseBd"
+                                                     CornerRadius="7.5"
+                                                     Background="#14FFFFFF"
+                                                     BorderBrush="#1AFFFFFF"
+                                                     BorderThickness="0.8">
+                                <controls:IconsaxIcon x:Name="CloseIc"
+                                                      Kind="Close"
+                                                      Size="10.5"
+                                                      Foreground="#A8B3CA"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" />
+                            </controls:SquircleBorder>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="CloseBd" Property="Background" Value="#2CFFFFFF" />
+                                    <Setter TargetName="CloseIc" Property="Foreground" Value="#FFFFFF" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="CloseBd" Property="Background" Value="#3CFFFFFF" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+        </Grid>
     </Grid>
 </UserControl>

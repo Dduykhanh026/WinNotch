@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using WinNotch.Engine;
@@ -51,6 +52,7 @@ public partial class NotchWindow : Window
     private readonly NotchStateMachine _stateMachine;
     private readonly SpringAnimator _springAnimator;
     private readonly MainNotchViewModel _viewModel;
+    private readonly NotificationService _notificationService;
     private readonly Action? _onSessionUnlockedRefreshAction;
     private readonly DispatcherTimer _unlockSettleTimer;
 
@@ -58,6 +60,10 @@ public partial class NotchWindow : Window
     private MonitorDescriptor _currentMonitor;
     private long _lastUnlockTimestamp;
     private bool _wtsRegistered;
+    private bool _shellHookRegistered;
+    private int _shellHookMsgId;
+
+    private const int TabCount = 4;
 
     // 60-240Hz Spring Tab Switcher & Sliding Segmented Pill State
     private int _activeTabIndex;
@@ -66,9 +72,12 @@ public partial class NotchWindow : Window
     private long _lastTabAnimTimestamp;
     private ScalarSpring _pillXSpring;
     private ScalarSpring _pillWSpring = new() { Value = 96.0, Target = 96.0 };
-    private readonly ScalarSpring[] _tabXSprings = new ScalarSpring[3];
-    private readonly double[] _tabAlphas = [1.0, 0.0, 0.0];
-    private readonly double[] _tabAlphaTargets = [1.0, 0.0, 0.0];
+    private readonly ScalarSpring[] _tabXSprings = new ScalarSpring[TabCount];
+    private readonly double[] _tabAlphas = [1.0, 0.0, 0.0, 0.0];
+    private readonly double[] _tabAlphaTargets = [1.0, 0.0, 0.0, 0.0];
+
+    private enum CollapsedDisplayMode { Idle, Timer, Agent, Music, Dual }
+    private CollapsedDisplayMode _lastCollapsedDisplayMode = CollapsedDisplayMode.Idle;
 
     public IntPtr WindowHandle => _hwnd;
 
@@ -76,6 +85,7 @@ public partial class NotchWindow : Window
         SettingsService settingsService,
         NotchStateMachine stateMachine,
         MainNotchViewModel viewModel,
+        NotificationService notificationService,
         MonitorDescriptor initialMonitor,
         Action? onSessionUnlockedRefreshAction = null)
     {
@@ -84,6 +94,7 @@ public partial class NotchWindow : Window
         _settingsService = settingsService;
         _stateMachine = stateMachine;
         _viewModel = viewModel;
+        _notificationService = notificationService;
         _currentMonitor = initialMonitor;
         _onSessionUnlockedRefreshAction = onSessionUnlockedRefreshAction;
 
@@ -102,7 +113,7 @@ public partial class NotchWindow : Window
         };
 
         DataContext = _viewModel;
-        _activeTabIndex = Math.Clamp((int)_viewModel.SelectedTab, 0, 2);
+        _activeTabIndex = Math.Clamp((int)_viewModel.SelectedTab, 0, TabCount - 1);
         SnapTabsToActiveIndex();
 
         NotchDimensions initialDims = _stateMachine.CurrentTargetDimensions;
@@ -122,6 +133,10 @@ public partial class NotchWindow : Window
 
         SourceInitialized += OnSourceInitialized;
         Closed += OnWindowClosed;
+        PreviewKeyDown += OnWindowPreviewKeyDown;
+
+        _lastCollapsedDisplayMode = DetermineCurrentCollapsedMode();
+        SyncAgentsDynamicHeight();
     }
 
     public void RepositionToMonitor(MonitorDescriptor monitor)
@@ -132,8 +147,16 @@ public partial class NotchWindow : Window
         double scaleX = monitor.DpiScaleX > 0 ? monitor.DpiScaleX : 1.0;
         double scaleY = monitor.DpiScaleY > 0 ? monitor.DpiScaleY : 1.0;
 
+        double dipHeight = monitor.PhysicalBounds.Height > 0 ? monitor.PhysicalBounds.Height / scaleY : 1080.0;
+        double canvasHeight = ConcaveNotchPath.CalculateHostCanvasHeight(dipHeight);
+
+        Width = ConcaveNotchPath.HostCanvasWidth;
+        Height = canvasHeight;
+        RootHost.Width = ConcaveNotchPath.HostCanvasWidth;
+        RootHost.Height = canvasHeight;
+
         int physW = (int)Math.Round(ConcaveNotchPath.HostCanvasWidth * scaleX);
-        int physH = (int)Math.Round(ConcaveNotchPath.HostCanvasHeight * scaleY);
+        int physH = (int)Math.Round(canvasHeight * scaleY);
         int physX = monitor.PhysicalBounds.Left + ((monitor.PhysicalBounds.Width - physW) / 2);
         int physY = monitor.PhysicalBounds.Top;
 
@@ -145,6 +168,8 @@ public partial class NotchWindow : Window
             physW,
             physH,
             NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+
+        SyncAgentsDynamicHeight();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -163,6 +188,17 @@ public partial class NotchWindow : Window
         }
         catch { }
 
+        try
+        {
+            uint msgId = NativeMethods.RegisterWindowMessageW("SHELLHOOK");
+            if (msgId != 0)
+            {
+                _shellHookMsgId = (int)msgId;
+                _shellHookRegistered = NativeMethods.RegisterShellHookWindow(_hwnd);
+            }
+        }
+        catch { }
+
         RepositionToMonitor(_currentMonitor);
     }
 
@@ -174,12 +210,22 @@ public partial class NotchWindow : Window
             return new IntPtr(NativeMethods.MA_NOACTIVATE);
         }
 
+        if (_shellHookMsgId != 0 && msg == _shellHookMsgId)
+        {
+            int code = wParam.ToInt32() & 0xFFFF;
+            if (code == NativeMethods.HSHELL_FLASH && lParam != IntPtr.Zero)
+            {
+                _notificationService.NotifyWindowFlashed(lParam);
+            }
+        }
+
         if (msg == NativeMethods.WM_WTSSESSION_CHANGE)
         {
             int reason = wParam.ToInt32();
             if (reason == NativeMethods.WTS_SESSION_LOCK)
             {
                 _unlockSettleTimer.Stop();
+                _notificationService.SetSessionLocked(true);
                 _stateMachine.CollapseImmediately();
             }
             else if (reason == NativeMethods.WTS_SESSION_UNLOCK)
@@ -207,6 +253,7 @@ public partial class NotchWindow : Window
             Dispatcher.BeginInvoke(() =>
             {
                 _unlockSettleTimer.Stop();
+                _notificationService.SetSessionLocked(true);
                 _stateMachine.CollapseImmediately();
             });
         }
@@ -226,6 +273,7 @@ public partial class NotchWindow : Window
         }
 
         _lastUnlockTimestamp = now;
+        _notificationService.SetSessionLocked(false);
         _unlockSettleTimer.Stop();
         _unlockSettleTimer.Start();
     }
@@ -295,6 +343,8 @@ public partial class NotchWindow : Window
 
         // 4. Expanded Workspace liquid unfold from top bezel (no abrupt Frame-0 disappearance!)
         ApplyLayerVisual(ExpandedLayer, frame.ExpandedOpacity);
+        ExpandedLayer.SetCurrentValue(FrameworkElement.WidthProperty, _stateMachine.ActiveExpandedDimensions.Width);
+        ExpandedLayer.SetCurrentValue(FrameworkElement.HeightProperty, Math.Max(_stateMachine.ActiveExpandedDimensions.Height, dims.Height));
         double clampedProg = Math.Clamp(frame.ExpandedProgress, 0.0, 1.03);
         double expScale = 0.88 + (0.12 * clampedProg);
         ExpandedScale.ScaleX = expScale;
@@ -332,6 +382,68 @@ public partial class NotchWindow : Window
         if (!NotchFillPath.IsMouseOver && !ContentViewport.IsMouseOver)
         {
             _stateMachine.NotifyPointerLeft();
+        }
+    }
+
+    private void OnNotchSurfaceMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (_stateMachine.State is not (NotchVisualState.CollapsedIdle or NotchVisualState.CollapsedActive))
+        {
+            return;
+        }
+
+        if (!_settingsService.Current.EnableCollapsedScrollGestures)
+        {
+            return;
+        }
+
+        _stateMachine.SuppressPendingHoverExpand();
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            _viewModel.StepBrightness(e.Delta > 0 ? 4 : -4);
+        }
+        else
+        {
+            _viewModel.StepVolume(e.Delta > 0 ? 2 : -2);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnNotchSurfaceMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_stateMachine.State is not (NotchVisualState.CollapsedIdle or NotchVisualState.CollapsedActive))
+        {
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Middle)
+        {
+            _stateMachine.SuppressPendingHoverExpand();
+
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                _viewModel.NextTrackCommand.Execute(null);
+            }
+            else
+            {
+                _viewModel.TogglePlayPauseCommand.Execute(null);
+            }
+
+            e.Handled = true;
+        }
+    }
+
+    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (_viewModel.IsFileShelfTabSelected && _viewModel.IsExpandedVisible)
+            {
+                _viewModel.PasteShelfFromClipboardCommand.Execute(null);
+                e.Handled = true;
+            }
         }
     }
 
@@ -381,6 +493,7 @@ public partial class NotchWindow : Window
     {
         _springAnimator.SetPreset(updated.SpringPreset);
         _stateMachine.ApplySettings(updated);
+        SyncAgentsDynamicHeight();
     }
 
     private void OnSystemDisplaySettingsChanged(object? sender, EventArgs e)
@@ -408,12 +521,131 @@ public partial class NotchWindow : Window
         }
     }
 
+    private void SyncAgentsDynamicHeight()
+    {
+        double scaleY = _currentMonitor.DpiScaleY > 0 ? _currentMonitor.DpiScaleY : 1.0;
+        double monitorDipHeight = _currentMonitor.PhysicalBounds.Height > 0
+            ? _currentMonitor.PhysicalBounds.Height / scaleY
+            : 1080.0;
+        double maxTwoThirds = Math.Floor(monitorDipHeight * (2.0 / 3.0));
+
+        _stateMachine.SetActiveTabAndAgentsHeight(
+            _viewModel.SelectedTab,
+            _viewModel.DesiredAgentsHeight,
+            maxTwoThirds);
+    }
+
+    private CollapsedDisplayMode DetermineCurrentCollapsedMode()
+    {
+        if (_viewModel.IsCollapsedDualMode) return CollapsedDisplayMode.Dual;
+        if (_viewModel.IsCollapsedMusicMode) return CollapsedDisplayMode.Music;
+        if (_viewModel.IsCollapsedTimerOnlyMode) return CollapsedDisplayMode.Timer;
+        if (_viewModel.IsCollapsedAgentOnlyMode) return CollapsedDisplayMode.Agent;
+        return CollapsedDisplayMode.Idle;
+    }
+
+    private void CheckAndAnimateCollapsedModeChange()
+    {
+        CollapsedDisplayMode currentMode = DetermineCurrentCollapsedMode();
+        if (currentMode == _lastCollapsedDisplayMode)
+            return;
+
+        _lastCollapsedDisplayMode = currentMode;
+        if (_stateMachine.State is NotchVisualState.CollapsedIdle or NotchVisualState.CollapsedActive)
+        {
+            PlayCollapsedModeTransition();
+        }
+    }
+
+    private int _collapsedTransitionGeneration;
+
+    private void PlayCollapsedModeTransition()
+    {
+        if (CollapsedContentHost == null || CollapsedContentTranslate == null || CollapsedContentScale == null)
+            return;
+
+        // Synchronously detach in-flight animation clocks and reset transforms before starting new transition
+        CollapsedContentTranslate.BeginAnimation(TranslateTransform.YProperty, null);
+        CollapsedContentScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        CollapsedContentScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        CollapsedContentHost.BeginAnimation(OpacityProperty, null);
+
+        CollapsedContentTranslate.Y = 0.0;
+        CollapsedContentScale.ScaleX = 1.0;
+        CollapsedContentScale.ScaleY = 1.0;
+        CollapsedContentHost.Opacity = 1.0;
+
+        int generation = ++_collapsedTransitionGeneration;
+
+        // Offscreen / headless test harness presentation guard:
+        // When the window is not loaded, not visible, or lacks an active HwndSource presentation source,
+        // starting compositor DoubleAnimations continuously drives DispatcherPriority.Render ticks
+        // that starve nested DispatcherPriority.Background pumps.
+        // Resting baseline values are already asserted above; return early without launching animations.
+        if (!IsLoaded || !IsVisible || PresentationSource.FromVisual(this) == null)
+            return;
+
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var duration = TimeSpan.FromMilliseconds(210);
+
+        var slideAnim = new DoubleAnimation(5.5, 0.0, duration) { EasingFunction = ease };
+        var scaleXAnim = new DoubleAnimation(0.96, 1.0, duration) { EasingFunction = ease };
+        var scaleYAnim = new DoubleAnimation(0.96, 1.0, duration) { EasingFunction = ease };
+        var fadeAnim = new DoubleAnimation(0.18, 1.0, duration) { EasingFunction = ease };
+
+        slideAnim.Completed += (_, _) =>
+        {
+            if (_collapsedTransitionGeneration != generation)
+                return;
+
+            CollapsedContentTranslate?.BeginAnimation(TranslateTransform.YProperty, null);
+            CollapsedContentScale?.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            CollapsedContentScale?.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            CollapsedContentHost?.BeginAnimation(OpacityProperty, null);
+
+            if (CollapsedContentTranslate != null) CollapsedContentTranslate.Y = 0.0;
+            if (CollapsedContentScale != null)
+            {
+                CollapsedContentScale.ScaleX = 1.0;
+                CollapsedContentScale.ScaleY = 1.0;
+            }
+            if (CollapsedContentHost != null) CollapsedContentHost.Opacity = 1.0;
+        };
+
+        CollapsedContentTranslate.BeginAnimation(TranslateTransform.YProperty, slideAnim);
+        CollapsedContentScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
+        CollapsedContentScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleYAnim);
+        CollapsedContentHost.BeginAnimation(OpacityProperty, fadeAnim);
+    }
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainNotchViewModel.SelectedTab) ||
+            e.PropertyName == nameof(MainNotchViewModel.DesiredAgentsHeight))
+        {
+            SyncAgentsDynamicHeight();
+        }
+
+        if (e.PropertyName is
+            nameof(MainNotchViewModel.IsMediaPlaying) or
+            nameof(MainNotchViewModel.HasActiveTimer) or
+            nameof(MainNotchViewModel.IsTimerAlarmRinging) or
+            nameof(MainNotchViewModel.HasActiveOrWaitingAgents) or
+            nameof(MainNotchViewModel.ShowCollapsedNetworkSpeed) or
+            nameof(MainNotchViewModel.ShowCollapsedTimerPill) or
+            nameof(MainNotchViewModel.IsCollapsedDualMode) or
+            nameof(MainNotchViewModel.IsCollapsedMusicMode) or
+            nameof(MainNotchViewModel.IsCollapsedTimerOnlyMode) or
+            nameof(MainNotchViewModel.IsCollapsedAgentOnlyMode) or
+            nameof(MainNotchViewModel.IsCollapsedIdleMode))
+        {
+            CheckAndAnimateCollapsedModeChange();
+        }
+
         if (e.PropertyName != nameof(MainNotchViewModel.SelectedTab))
             return;
 
-        int nextIdx = Math.Clamp((int)_viewModel.SelectedTab, 0, 2);
+        int nextIdx = Math.Clamp((int)_viewModel.SelectedTab, 0, TabCount - 1);
         if (nextIdx == _activeTabIndex)
             return;
 
@@ -433,7 +665,7 @@ public partial class NotchWindow : Window
 
         UpdatePillTargetForIndex(nextIdx, snap: false);
 
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < TabCount; i++)
         {
             Grid page = GetTabPage(i);
             if (i == nextIdx)
@@ -471,7 +703,7 @@ public partial class NotchWindow : Window
         ApplyTabHitTestTargets(_activeTabIndex);
         UpdatePillTargetForIndex(_activeTabIndex, snap: true);
 
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < TabCount; i++)
         {
             bool active = i == _activeTabIndex;
             _tabAlphas[i] = active ? 1.0 : 0.0;
@@ -493,9 +725,10 @@ public partial class NotchWindow : Window
 
     private void ApplyTabHitTestTargets(int activeIdx)
     {
-        TabPageOverview.IsHitTestVisible = activeIdx == 0;
-        TabPageSystem.IsHitTestVisible = activeIdx == 1;
-        TabPageShelf.IsHitTestVisible = activeIdx == 2;
+        TabPageAgents.IsHitTestVisible = activeIdx == 0;
+        TabPageOverview.IsHitTestVisible = activeIdx == 1;
+        TabPageSystem.IsHitTestVisible = activeIdx == 2;
+        TabPageShelf.IsHitTestVisible = activeIdx == 3;
     }
 
     private bool UpdatePillTargetForIndex(int index, bool snap)
@@ -562,14 +795,15 @@ public partial class NotchWindow : Window
             bool t0 = _tabXSprings[0].Step(subDt, 460.0, 41.5);
             bool t1 = _tabXSprings[1].Step(subDt, 460.0, 41.5);
             bool t2 = _tabXSprings[2].Step(subDt, 460.0, 41.5);
-            anySpringMoving = px || pw || t0 || t1 || t2;
+            bool t3 = _tabXSprings[3].Step(subDt, 460.0, 41.5);
+            anySpringMoving = px || pw || t0 || t1 || t2 || t3;
         }
 
         ActiveTabPillTranslate.X = _pillXSpring.Value;
         ActiveTabPill.Width = Math.Max(24.0, _pillWSpring.Value);
 
         bool anyAlphaMoving = false;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < TabCount; i++)
         {
             double cur = _tabAlphas[i];
             double tgt = _tabAlphaTargets[i];
@@ -630,40 +864,53 @@ public partial class NotchWindow : Window
 
     private Button GetTabButton(int index) => index switch
     {
-        1 => TabBtnSystem,
-        2 => TabBtnShelf,
-        _ => TabBtnOverview
+        1 => TabBtnOverview,
+        2 => TabBtnSystem,
+        3 => TabBtnShelf,
+        _ => TabBtnAgents
     };
 
     private Grid GetTabPage(int index) => index switch
     {
-        1 => TabPageSystem,
-        2 => TabPageShelf,
-        _ => TabPageOverview
+        1 => TabPageOverview,
+        2 => TabPageSystem,
+        3 => TabPageShelf,
+        _ => TabPageAgents
     };
 
     private ScaleTransform GetTabScale(int index) => index switch
     {
-        1 => TabSystemScale,
-        2 => TabShelfScale,
-        _ => TabOverviewScale
+        1 => TabOverviewScale,
+        2 => TabSystemScale,
+        3 => TabShelfScale,
+        _ => TabAgentsScale
     };
 
     private TranslateTransform GetTabTranslate(int index) => index switch
     {
-        1 => TabSystemTranslate,
-        2 => TabShelfTranslate,
-        _ => TabOverviewTranslate
+        1 => TabOverviewTranslate,
+        2 => TabSystemTranslate,
+        3 => TabShelfTranslate,
+        _ => TabAgentsTranslate
     };
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         _unlockSettleTimer.Stop();
         StopTabAnimationLoop();
+        CollapsedContentTranslate?.BeginAnimation(TranslateTransform.YProperty, null);
+        CollapsedContentScale?.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        CollapsedContentScale?.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        CollapsedContentHost?.BeginAnimation(OpacityProperty, null);
         if (_wtsRegistered && _hwnd != IntPtr.Zero)
         {
             try { NativeMethods.WTSUnRegisterSessionNotification(_hwnd); } catch { }
             _wtsRegistered = false;
+        }
+        if (_shellHookRegistered && _hwnd != IntPtr.Zero)
+        {
+            try { NativeMethods.DeregisterShellHookWindow(_hwnd); } catch { }
+            _shellHookRegistered = false;
         }
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         SystemEvents.DisplaySettingsChanged -= OnSystemDisplaySettingsChanged;

@@ -19,11 +19,20 @@ public sealed partial class ShelfItem : ObservableObject
     private ImageSource? _thumbnail;
 
     [JsonIgnore]
+    public bool IsUrl => Kind == ShelfItemKind.TextSnippet &&
+                         !string.IsNullOrWhiteSpace(TextContent) &&
+                         Uri.TryCreate(TextContent.Trim(), UriKind.Absolute, out Uri? uri) &&
+                         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    [JsonIgnore]
     public IconsaxKind FallbackIcon => Kind switch
     {
         ShelfItemKind.Folder => IconsaxKind.Folder,
         ShelfItemKind.ImageClip => IconsaxKind.Gallery,
-        ShelfItemKind.TextSnippet => IconsaxKind.NoteText,
+        ShelfItemKind.TextSnippet => IsUrl ? IconsaxKind.Global : IconsaxKind.NoteText,
         _ => IconsaxKind.DocumentText
     };
+
+    [JsonIgnore]
+    public string TooltipText => IsUrl && !string.IsNullOrEmpty(TextContent) ? TextContent : FilePath;
 }

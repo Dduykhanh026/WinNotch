@@ -16,14 +16,16 @@ public enum CollapsedContentKind
     Idle,
     TimerOnly,
     MusicOnly,
-    MusicAndTimer
+    MusicAndTimer,
+    AgentOnly
 }
 
 public enum NotchTab
 {
-    Overview = 0,
-    System = 1,
-    FileShelf = 2
+    Agents = 0,
+    Overview = 1,
+    System = 2,
+    FileShelf = 3
 }
 
 public enum HudKind
@@ -32,7 +34,22 @@ public enum HudKind
     Brightness,
     Battery,
     TrackChange,
-    FaceIdUnlock
+    FaceIdUnlock,
+    Notification,
+    AudioDevice,
+    Microphone,
+    Caffeine,
+    CapsLock,
+    ColorPicked,
+    MemoryOptimized,
+    AgentAlert
+}
+
+public enum HudShapeKind
+{
+    CompactPill,
+    FaceIdSquare,
+    NotificationBanner
 }
 
 public enum ShelfItemKind

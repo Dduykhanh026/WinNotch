@@ -27,6 +27,9 @@ public sealed class DisplayPowerService : IDisposable
     public bool HasBattery { get; private set; }
     public bool IsCharging { get; private set; }
     public int BatteryPercent { get; private set; } = 100;
+    public string BatteryStatusDetail { get; private set; } = string.Empty;
+
+    public bool IsCaffeineActive { get; private set; }
 
     public event Action? StateChanged;
     public event Action<HudPayload>? HudRequested;
@@ -90,6 +93,68 @@ public sealed class DisplayPowerService : IDisposable
     public void StepBrightness(int deltaPercent)
     {
         SetBrightnessPercent(BrightnessPercent + deltaPercent, showHud: true);
+    }
+
+    public void ToggleCaffeine(bool showHud = true)
+    {
+        SetCaffeine(!IsCaffeineActive, showHud);
+    }
+
+    public void SetCaffeine(bool active, bool showHud = true)
+    {
+        if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+        {
+            Application.Current.Dispatcher.BeginInvoke(() => SetCaffeine(active, showHud));
+            return;
+        }
+
+        if (IsCaffeineActive == active)
+        {
+            if (showHud)
+            {
+                EmitCaffeineHud();
+            }
+            return;
+        }
+
+        IsCaffeineActive = active;
+
+        try
+        {
+            if (active)
+            {
+                NativeMethods.SetThreadExecutionState(
+                    NativeMethods.EXECUTION_STATE.ES_CONTINUOUS |
+                    NativeMethods.EXECUTION_STATE.ES_SYSTEM_REQUIRED |
+                    NativeMethods.EXECUTION_STATE.ES_DISPLAY_REQUIRED);
+            }
+            else
+            {
+                NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
+            }
+        }
+        catch { }
+
+        StateChanged?.Invoke();
+
+        if (showHud)
+        {
+            EmitCaffeineHud();
+        }
+    }
+
+    private void EmitCaffeineHud()
+    {
+        HudRequested?.Invoke(new HudPayload
+        {
+            Kind = HudKind.Caffeine,
+            Icon = IconsaxKind.Coffee,
+            Title = "Giữ sáng màn hình",
+            ValueText = IsCaffeineActive ? "Đang bật" : "Đã tắt",
+            NormalizedValue = IsCaffeineActive ? 1.0 : 0.0,
+            IsInteractiveSlider = false,
+            AccentHex = "#F59E0B"
+        });
     }
 
     private void InitializeBrightnessBackend()
@@ -270,6 +335,37 @@ public sealed class DisplayPowerService : IDisposable
         HasBattery = hasBat;
         IsCharging = charging;
         BatteryPercent = pct;
+
+        if (!hasBat)
+        {
+            BatteryStatusDetail = "Nguồn trực tiếp";
+        }
+        else if (charging)
+        {
+            BatteryStatusDetail = $"Đang sạc nguồn • {pct}%";
+        }
+        else if (status.BatteryLifeTime > 0 && (uint)status.BatteryLifeTime != 0xFFFFFFFF)
+        {
+            int hours = status.BatteryLifeTime / 3600;
+            int minutes = (status.BatteryLifeTime % 3600) / 60;
+            if (hours > 0 && minutes > 0)
+            {
+                BatteryStatusDetail = $"Pin {pct}% • Còn ~{hours}g {minutes}p";
+            }
+            else if (hours > 0)
+            {
+                BatteryStatusDetail = $"Pin {pct}% • Còn ~{hours}g";
+            }
+            else
+            {
+                BatteryStatusDetail = $"Pin {pct}% • Còn ~{Math.Max(1, minutes)}p";
+            }
+        }
+        else
+        {
+            BatteryStatusDetail = $"Pin {pct}%";
+        }
+
         StateChanged?.Invoke();
 
         if (!hasBat) return;
@@ -332,6 +428,13 @@ public sealed class DisplayPowerService : IDisposable
 
     public void Dispose()
     {
+        try
+        {
+            NativeMethods.SetThreadExecutionState(NativeMethods.EXECUTION_STATE.ES_CONTINUOUS);
+        }
+        catch { }
+        IsCaffeineActive = false;
+
         _powerPollTimer.Stop();
         SystemEvents.PowerModeChanged -= OnSystemPowerModeChanged;
 

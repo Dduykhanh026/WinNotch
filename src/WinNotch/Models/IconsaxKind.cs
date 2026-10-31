@@ -45,5 +45,14 @@ public enum IconsaxKind
     ArrowUp,
     Setting4,
     Scan,
-    Lock
+    Lock,
+    Notification,
+    Microphone,
+    MicrophoneSlash,
+    Coffee,
+    Colorfilter,
+    Broom,
+    Add,
+    Bot,
+    Hierarchy
 }

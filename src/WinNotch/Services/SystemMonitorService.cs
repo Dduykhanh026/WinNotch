@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows;
 using Microsoft.Win32;
 using WinNotch.Interop;
@@ -102,9 +103,123 @@ public sealed class SystemMonitorService : IDisposable
 
     public event Action<SystemTelemetrySnapshot>? SnapshotUpdated;
 
+    private int _isOptimizingRam; // 0 = idle, 1 = running
+
+    /// <summary>
+    /// Event fired when RAM optimization completes with total reclaimed bytes.
+    /// </summary>
+    public event Action<long>? WorkingSetOptimized;
+
     public SystemMonitorService(SettingsService settingsService)
     {
         _settingsService = settingsService;
+    }
+
+    /// <summary>
+    /// Asynchronously trims the working set of all eligible user-mode processes,
+    /// measures physical RAM reclaimed, and pushes an immediate telemetry update.
+    /// 100% User-Mode safe — zero UAC elevation required.
+    /// </summary>
+    /// <returns>Reclaimed bytes as long (convert to MB via bytes / (1024 * 1024)).</returns>
+    public async Task<long> OptimizeWorkingSetAsync()
+    {
+        // Reentrancy guard: if already optimizing, return 0 immediately
+        if (Interlocked.CompareExchange(ref _isOptimizingRam, 1, 0) != 0)
+        {
+            return 0L;
+        }
+
+        try
+        {
+            return await Task.Run(() =>
+            {
+                ulong availBefore = ReadAvailablePhysicalBytes();
+                int currentPid = Environment.ProcessId;
+
+                Process[] processes = Process.GetProcesses();
+                try
+                {
+                    const uint desiredAccess = NativeMethods.PROCESS_SET_QUOTA | NativeMethods.PROCESS_QUERY_INFORMATION;
+
+                    foreach (Process proc in processes)
+                    {
+                        int pid = proc.Id;
+
+                        // 1. Skip system idle (0) and kernel system (4)
+                        if (pid <= 4) continue;
+
+                        // 2. Skip WinNotch itself to preserve 240Hz UI smoothness and prevent DirectX cache purge
+                        if (pid == currentPid) continue;
+
+                        // 3. Skip known system daemons
+                        try
+                        {
+                            string procName = proc.ProcessName;
+                            if (IgnoredProcessNames.Contains(procName)) continue;
+                        }
+                        catch
+                        {
+                            // Process may have exited before inspection
+                            continue;
+                        }
+
+                        // 4. Open process with exact required rights (non-elevated safe)
+                        IntPtr hProcess = NativeMethods.OpenProcess(desiredAccess, false, pid);
+                        if (hProcess == IntPtr.Zero)
+                        {
+                            // Access denied on elevated/system processes — gracefully ignore
+                            continue;
+                        }
+
+                        try
+                        {
+                            NativeMethods.EmptyWorkingSet(hProcess);
+                        }
+                        catch
+                        {
+                            // Guard against process terminating mid-operation
+                        }
+                        finally
+                        {
+                            NativeMethods.CloseHandle(hProcess);
+                        }
+                    }
+                }
+                finally
+                {
+                    foreach (Process proc in processes)
+                    {
+                        try { proc.Dispose(); } catch { }
+                    }
+                }
+
+                // Settle Windows memory manager working set counters
+                Thread.Sleep(50);
+
+                ulong availAfter = ReadAvailablePhysicalBytes();
+                long reclaimedBytes = availAfter > availBefore ? (long)(availAfter - availBefore) : 0L;
+
+                // Force Tier-1 telemetry refresh and immediate UI update
+                SampleTier1();
+                EmitSnapshotToUi();
+
+                WorkingSetOptimized?.Invoke(reclaimedBytes);
+                return reclaimedBytes;
+            }).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isOptimizingRam, 0);
+        }
+    }
+
+    private static ulong ReadAvailablePhysicalBytes()
+    {
+        var mem = new NativeMethods.MEMORYSTATUSEX
+        {
+            dwLength = (uint)Marshal.SizeOf<NativeMethods.MEMORYSTATUSEX>()
+        };
+        return NativeMethods.GlobalMemoryStatusEx(ref mem) ? mem.ullAvailPhys : 0UL;
     }
 
     public void Start()

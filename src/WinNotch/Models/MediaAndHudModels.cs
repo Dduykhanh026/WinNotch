@@ -8,12 +8,17 @@ public sealed class HudPayload
     public HudKind Kind { get; init; }
     public IconsaxKind Icon { get; init; } = IconsaxKind.VolumeHigh;
     public string Title { get; init; } = string.Empty;
+    public string Subtitle { get; init; } = string.Empty;
+    public string BodyText { get; init; } = string.Empty;
+    public string TimestampBadge { get; init; } = "Bây giờ";
     public string ValueText { get; init; } = string.Empty;
     public double NormalizedValue { get; init; }
     public bool IsInteractiveSlider { get; init; }
     public bool IsMuted { get; init; }
     public string AccentHex { get; init; } = "#FFFFFF";
     public ImageSource? Thumbnail { get; init; }
+    public string SourceAumid { get; init; } = string.Empty;
+    public IntPtr TargetWindowHandle { get; init; }
 }
 
 public sealed class MediaSnapshot

@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -69,6 +71,306 @@ public sealed class FileShelfService
         }
 
         return added;
+    }
+
+    /// <summary>
+    /// Reads and inserts items from the Windows Clipboard (File drops, Images, or Text/URLs)
+    /// into the File Shelf with full STA apartment safety and COM exception resilience.
+    /// </summary>
+    /// <returns>Number of items successfully added.</returns>
+    public int PasteFromClipboard()
+    {
+        if (Application.Current != null && Application.Current.Dispatcher.CheckAccess())
+        {
+            return PasteFromClipboardCore();
+        }
+
+        if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
+        {
+            return PasteFromClipboardCore();
+        }
+
+        int count = 0;
+        var thread = new Thread(() =>
+        {
+            count = PasteFromClipboardCore();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        thread.Join();
+        return count;
+    }
+
+    private int PasteFromClipboardCore()
+    {
+        IDataObject? data = null;
+
+        // Clipboard locking retry guard (handles transient 0x800401D0 CLIPBRD_E_CANT_OPEN)
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                data = Clipboard.GetDataObject();
+                if (data != null) break;
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                Thread.Sleep(40);
+            }
+            catch
+            {
+                break;
+            }
+        }
+
+        if (data == null) return 0;
+
+        int added = 0;
+
+        // 1. Check for File Drop List (must precede text checks)
+        if (data.GetDataPresent(DataFormats.FileDrop))
+        {
+            IEnumerable<string>? paths = null;
+            try
+            {
+                object? dropData = data.GetData(DataFormats.FileDrop);
+                paths = dropData switch
+                {
+                    string[] array => array,
+                    StringCollection stringCol => stringCol.Cast<string>(),
+                    IEnumerable<string> enumerable => enumerable,
+                    _ => null
+                };
+
+                if (paths == null && Clipboard.ContainsFileDropList())
+                {
+                    paths = Clipboard.GetFileDropList().Cast<string>();
+                }
+            }
+            catch { }
+
+            if (paths != null)
+            {
+                foreach (string rawPath in paths)
+                {
+                    if (string.IsNullOrWhiteSpace(rawPath)) continue;
+                    if (AddFileOrFolder(rawPath)) added++;
+                }
+
+                if (added > 0)
+                {
+                    SaveToDisk();
+                    ShelfChanged?.Invoke();
+                }
+                return added;
+            }
+        }
+
+        // 2. Check for Image Clip (preserves 32-bit PNG alpha from browsers, fallback to Clipboard.GetImage)
+        BitmapSource? imageSource = null;
+        try
+        {
+            if (data.GetDataPresent("PNG") || data.GetDataPresent("image/png"))
+            {
+                object? pngData = data.GetData("PNG") ?? data.GetData("image/png");
+                if (pngData is MemoryStream ms)
+                {
+                    var decoder = new PngBitmapDecoder(ms, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                    if (decoder.Frames.Count > 0)
+                    {
+                        imageSource = decoder.Frames[0];
+                    }
+                }
+            }
+
+            if (imageSource == null && data.GetDataPresent(DataFormats.Bitmap))
+            {
+                imageSource = data.GetData(DataFormats.Bitmap) as BitmapSource;
+            }
+
+            if (imageSource == null && Clipboard.ContainsImage())
+            {
+                imageSource = Clipboard.GetImage();
+            }
+        }
+        catch { }
+
+        if (imageSource != null)
+        {
+            if (AddBitmapClip(imageSource))
+            {
+                added++;
+                SaveToDisk();
+                ShelfChanged?.Invoke();
+            }
+            return added;
+        }
+
+        // 3. Check for Text / URL Snippet
+        if (data.GetDataPresent(DataFormats.UnicodeText) || data.GetDataPresent(DataFormats.Text) || Clipboard.ContainsText())
+        {
+            string? text = null;
+            try
+            {
+                text = (data.GetData(DataFormats.UnicodeText) ?? data.GetData(DataFormats.Text)) as string;
+                if (string.IsNullOrEmpty(text) && Clipboard.ContainsText())
+                {
+                    text = Clipboard.GetText();
+                }
+            }
+            catch { }
+
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                if (AddTextSnippet(text))
+                {
+                    added++;
+                    SaveToDisk();
+                    ShelfChanged?.Invoke();
+                }
+                return added;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Launches the shelf item using default associated application or opens web URLs in browser.
+    /// Safely handles missing files and canceled UAC elevations.
+    /// </summary>
+    public void OpenItem(ShelfItem? item)
+    {
+        if (item == null) return;
+
+        try
+        {
+            // 1. Web Link handling for TextSnippet items
+            if (item.Kind == ShelfItemKind.TextSnippet &&
+                !string.IsNullOrWhiteSpace(item.TextContent) &&
+                Uri.TryCreate(item.TextContent.Trim(), UriKind.Absolute, out Uri? uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = uri.AbsoluteUri,
+                    UseShellExecute = true
+                });
+                return;
+            }
+
+            // 2. Local File / Directory / Image / Note handling
+            string targetPath = item.FilePath;
+            if (string.IsNullOrWhiteSpace(targetPath)) return;
+
+            // Auto-recreate backing text note if missing
+            if (item.Kind == ShelfItemKind.TextSnippet && !File.Exists(targetPath) && !string.IsNullOrEmpty(item.TextContent))
+            {
+                string idPrefix = item.Id.Length >= 8 ? item.Id[..8] : item.Id;
+                string fileName = $"note_{idPrefix}.txt";
+                targetPath = Path.Combine(_settingsService.ShelfClipsDirectory, fileName);
+                File.WriteAllText(targetPath, item.TextContent, Encoding.UTF8);
+                item.FilePath = targetPath;
+            }
+
+            if (!File.Exists(targetPath) && !Directory.Exists(targetPath))
+            {
+                return;
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = targetPath,
+                UseShellExecute = true
+            });
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // Canceled UAC or no associated application
+        }
+        catch (Exception)
+        {
+            // Defensive suppression to ensure UI stability
+        }
+    }
+
+    /// <summary>
+    /// Opens Windows Explorer with /select,"&lt;path&gt;" to highlight the item in its parent folder.
+    /// Falls back to opening parent directory if the target file has been moved or deleted.
+    /// </summary>
+    public void RevealInExplorer(ShelfItem? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.FilePath)) return;
+
+        try
+        {
+            string fullPath = Path.GetFullPath(item.FilePath);
+
+            // Existing file: highlight in folder
+            if (File.Exists(fullPath))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{fullPath.TrimEnd('\\')}\"",
+                    UseShellExecute = true
+                });
+                return;
+            }
+
+            // Existing directory: highlight inside parent or open root drive
+            if (Directory.Exists(fullPath))
+            {
+                string? parent = Path.GetDirectoryName(fullPath.TrimEnd('\\'));
+                if (string.IsNullOrEmpty(parent))
+                {
+                    // Drive root (e.g. C:\)
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"\"{fullPath}\"",
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    // Subdirectory
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"/select,\"{fullPath.TrimEnd('\\')}\"",
+                        UseShellExecute = true
+                    });
+                }
+                return;
+            }
+
+            // Deleted or moved: fallback to nearest existing parent directory
+            string? existingParent = Path.GetDirectoryName(fullPath);
+            while (!string.IsNullOrEmpty(existingParent) && !Directory.Exists(existingParent))
+            {
+                existingParent = Path.GetDirectoryName(existingParent);
+            }
+
+            if (!string.IsNullOrEmpty(existingParent) && Directory.Exists(existingParent))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{existingParent}\"",
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // Canceled process creation
+        }
+        catch (Exception)
+        {
+            // Defensive suppression
+        }
     }
 
     public void RemoveItem(ShelfItem? item)

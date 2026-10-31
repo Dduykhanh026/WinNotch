@@ -159,6 +159,20 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Cử chỉ chuột trên thanh Notch thu gọn" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Lăn chuột chỉnh Âm lượng (Shift: Độ sáng) • Chuột giữa Play/Pause (Shift: Qua bài)" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableCollapsedScrollGestures}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
                                 <TextBlock Text="Tự động ẩn khi xem Video / Chơi Game Fullscreen" FontSize="12" FontWeight="SemiBold" />
                                 <TextBlock Text="Tương thích chuẩn với chế độ Tự động ẩn Taskbar &amp; màn hình 125% DPI" FontSize="10.5" Foreground="#8E96AA" />
                             </StackPanel>
@@ -181,6 +195,71 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Card 2.5: AI Agent Command Center & Live Activity -->
+                <TextBlock Text="GIÁM SÁT AI AGENTS (LIVE ACTIVITY)"
+                           FontSize="10.5"
+                           FontWeight="Bold"
+                           Foreground="#7E869A"
+                           Margin="4,0,0,6" />
+                <Border Background="#161923"
+                        BorderBrush="#242938"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="14,10"
+                        Margin="0,0,0,14">
+                    <StackPanel>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Tự động giám sát AI Agents thời gian thực (0% CPU khi rảnh)" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Tự bắt tín hiệu Antigravity CLI, Teamwork, Codex, Claude Code &amp; Named Pipe nội bộ" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableAgentMonitor}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="HUD Dynamic Island khi Agent Chờ duyệt / Hoàn tất" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Thả thẻ đen tuyền #050507 khi Agent hỏi ý kiến hoặc chạy xong • Nhấp để nhảy tới cửa sổ" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Style="{StaticResource NotchPillButton}"
+                                    Command="{Binding PreviewAgentHudCommand}"
+                                    Padding="10,4"
+                                    Margin="0,0,10,0"
+                                    FontSize="10.8"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Xem thử HUD thông báo AI Agent trên thanh Notch"
+                                    Content="Xem thử" />
+                            <CheckBox Grid.Column="2" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableAgentApprovalHud}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Đặt Tab 'Agents' làm Tab mở mặc định" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Hiển thị ngay Trung tâm AI Agents ở lần đầu rê chuột mở Notch" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding DefaultOpenAgentsTab}" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- Card 3: Modules & File Shelf -->
                 <TextBlock Text="TIỆN ÍCH &amp; KHAY GIỮ FILE"
                            FontSize="10.5"
@@ -194,6 +273,58 @@
                         Padding="14,10"
                         Margin="0,0,0,8">
                     <StackPanel>
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Hiệu ứng nhận thông báo Dynamic Island" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Thả thẻ thông báo đen tuyền chuẩn iOS • Nhấp để mở thẳng ứng dụng" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Style="{StaticResource NotchPillButton}"
+                                    Command="{Binding PreviewNotificationCommand}"
+                                    Padding="10,4"
+                                    Margin="0,0,10,0"
+                                    FontSize="10.8"
+                                    VerticalAlignment="Center"
+                                    ToolTip="Xem thử hiệu ứng nhận thông báo Dynamic Island"
+                                    Content="Xem thử" />
+                            <CheckBox Grid.Column="2" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableNotificationHud}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Ẩn nội dung tin nhắn trên thông báo (Chế độ thuyết trình)" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Chỉ hiện tên ứng dụng &amp; 'Đã nhận 1 thông báo mới' khi bạn chia sẻ màn hình" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding HideNotificationPreviewText}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="Tắt thông báo Notch khi Windows bật Không làm phiền" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Tắt mặc định để bạn có thể bật DND ẩn popup góc dưới Windows và chỉ dùng Notch" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding RespectWindowsDoNotDisturb}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
                         <Grid Margin="0,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -256,6 +387,34 @@
                                 <TextBlock Text="Bung nhanh thông báo khi cắm sạc, pin yếu (20%/10%) hoặc qua bài mới" FontSize="10.5" Foreground="#8E96AA" />
                             </StackPanel>
                             <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableBatteryHud}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="HUD kết nối Loa &amp; Tai nghe (Kiểu AirPods)" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Thả thẻ đen tuyền báo tên thiết bị &amp; âm lượng khi cắm/đổi Loa hoặc Tai nghe" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableAudioDeviceHud}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Separator Background="#222736" Margin="0,8" />
+
+                        <Grid Margin="0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock Text="HUD trạng thái phím Caps Lock" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Hiển thị viên thuốc HUD nhanh 1.35s trạng thái BẬT / TẮT khi bấm phím Caps Lock" FontSize="10.5" Foreground="#8E96AA" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Style="{StaticResource FluentToggleSwitch}" IsChecked="{Binding EnableCapsLockHud}" VerticalAlignment="Center" />
                         </Grid>
 
                         <Separator Background="#222736" Margin="0,8" />

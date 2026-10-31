@@ -10,6 +10,8 @@ public sealed class TimerService : IDisposable
     private readonly DispatcherTimer _tickTimer;
     private readonly DispatcherTimer _alarmStopTimer;
 
+    public const int MaxTimerSeconds = 5999;
+
     private int _remainingSeconds;
     private int _totalSeconds;
 
@@ -72,6 +74,37 @@ public sealed class TimerService : IDisposable
             IsRunning = true;
             _tickTimer.Start();
         }
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Steps the timer by a specified number of whole minutes.
+    /// When the timer is active (running or paused), adjusts the remaining duration.
+    /// Clamps between 0 and 5999 seconds. If the duration drops to or below zero,
+    /// performs a clean reset without ringing the alarm.
+    /// </summary>
+    /// <param name="deltaMinutes">Number of minutes to add (positive) or subtract (negative).</param>
+    public void StepMinutes(int deltaMinutes)
+    {
+        if (deltaMinutes == 0) return;
+        DismissAlarm();
+
+        if (!IsRunning && !IsPaused)
+        {
+            if (deltaMinutes <= 0) return;
+            StartPresetMinutes(Math.Clamp(deltaMinutes, 1, 99));
+            return;
+        }
+
+        int targetSeconds = _remainingSeconds + (deltaMinutes * 60);
+        if (targetSeconds <= 0)
+        {
+            Reset();
+            return;
+        }
+
+        _remainingSeconds = Math.Clamp(targetSeconds, 0, MaxTimerSeconds);
+        _totalSeconds = Math.Max(_totalSeconds, _remainingSeconds);
         StateChanged?.Invoke();
     }
 

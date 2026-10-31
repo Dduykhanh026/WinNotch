@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:WinNotch.Views.Controls"
         Title="WinNotch"
-        Width="760"
-        Height="320"
+        Width="820"
+        Height="860"
         FontFamily="{StaticResource AppleFontFamily}"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
@@ -21,7 +21,7 @@
         DragLeave="OnWindowDragLeave"
         Drop="OnWindowDrop">
 
-    <Grid x:Name="RootHost" Width="760" Height="320" Background="Transparent">
+    <Grid x:Name="RootHost" Width="820" Height="860" Background="Transparent">
         <!-- 0. Zero-Cost GPU Vector Soft Ambient Halo (240Hz-friendly, no shader blur lag) -->
         <Path x:Name="NotchAmbientHaloPath"
               Stroke="#16000000"
@@ -36,7 +36,9 @@
         <Path x:Name="NotchFillPath"
               Fill="{StaticResource NotchShellBrush}"
               MouseEnter="OnNotchSurfaceMouseEnter"
-              MouseLeave="OnNotchSurfaceMouseLeave" />
+              MouseLeave="OnNotchSurfaceMouseLeave"
+              PreviewMouseWheel="OnNotchSurfaceMouseWheel"
+              PreviewMouseDown="OnNotchSurfaceMouseDown" />
 
         <!-- 2. Open Bottom+Sides Rim Highlight (Zero seam on Y=0 top bezel) -->
         <Path x:Name="NotchRimPath"
@@ -64,7 +66,9 @@
                 Background="Transparent"
                 ClipToBounds="True"
                 MouseEnter="OnNotchSurfaceMouseEnter"
-                MouseLeave="OnNotchSurfaceMouseLeave">
+                MouseLeave="OnNotchSurfaceMouseLeave"
+                PreviewMouseWheel="OnNotchSurfaceMouseWheel"
+                PreviewMouseDown="OnNotchSurfaceMouseDown">
             <Grid>
 
                 <!-- =============================================================== -->
@@ -83,7 +87,16 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- MAIN CONTENT ZONE (Utilizes Full Center Without Fake Camera Cutout) -->
-                    <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Grid x:Name="CollapsedContentHost"
+                          Grid.Column="0"
+                          VerticalAlignment="Center"
+                          RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <TransformGroup>
+                                <TranslateTransform x:Name="CollapsedContentTranslate" Y="0" />
+                                <ScaleTransform x:Name="CollapsedContentScale" ScaleX="1" ScaleY="1" />
+                            </TransformGroup>
+                        </Grid.RenderTransform>
 
                         <!-- MODE A: IDLE ("15:05 · T6, 30" or optional "15:05 · ↓ 2.4 MB/s") -->
                         <StackPanel Orientation="Horizontal"
@@ -157,6 +170,94 @@
                                        HorizontalAlignment="Right"
                                        Margin="7,0,5.5,0"
                                        VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- MODE B2: AI AGENT LIVE ACTIVITY (20x20 Squircle Bot/Hierarchy Badge + Live Tool/Milestone Text) -->
+                        <Grid VerticalAlignment="Center"
+                              Visibility="{Binding IsCollapsedAgentOnlyMode, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
+                                <!-- Concentric Aura Breathing Pulse -->
+                                <controls:SquircleBorder CornerRadius="5.2"
+                                                         Background="{Binding CollapsedAgentAccentBrush}"
+                                                         IsHitTestVisible="False"
+                                                         Opacity="0"
+                                                         RenderTransformOrigin="0.5,0.5">
+                                    <controls:SquircleBorder.RenderTransform>
+                                        <ScaleTransform x:Name="AgentBadgeAuraScale" ScaleX="1.0" ScaleY="1.0" />
+                                    </controls:SquircleBorder.RenderTransform>
+                                    <controls:SquircleBorder.Style>
+                                        <Style TargetType="controls:SquircleBorder">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasActiveOrWaitingAgents}" Value="True">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard x:Name="AgentBadgeAuraStory">
+                                                            <Storyboard RepeatBehavior="Forever">
+                                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                                                 From="1.0" To="1.45" Duration="0:0:1.650">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut" />
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                                                 From="1.0" To="1.45" Duration="0:0:1.650">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut" />
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                 From="0.45" To="0.0" Duration="0:0:1.650">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <QuadraticEase EasingMode="EaseOut" />
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <StopStoryboard BeginStoryboardName="AgentBadgeAuraStory" />
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </controls:SquircleBorder.Style>
+                                </controls:SquircleBorder>
+
+                                <controls:SquircleBorder Width="20"
+                                                         Height="20"
+                                                         CornerRadius="5.2"
+                                                         Background="{Binding CollapsedAgentPillBgBrush}"
+                                                         VerticalAlignment="Center">
+                                    <controls:IconsaxIcon Kind="{Binding CollapsedAgentIcon}"
+                                                          Size="11.8"
+                                                          Foreground="{Binding CollapsedAgentAccentBrush}"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center" />
+                                </controls:SquircleBorder>
+                            </Grid>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding CollapsedAgentText}"
+                                       FontSize="11.6"
+                                       FontWeight="Medium"
+                                       Margin="7.5,0,5,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#F0F5FF" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsAgentWaitingApproval}" Value="True">
+                                                <Setter Property="Foreground" Value="{Binding CollapsedAgentAccentBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </Grid>
 
                         <!-- MODE C: MUSIC PLAYING (+ Optional Dual-Activity Timer on Right) -->
@@ -270,6 +371,24 @@
                                  VerticalAlignment="Center"
                                  ToolTip="{Binding MicrophoneTooltip}"
                                  Visibility="{Binding IsMicrophoneActive, Converter={StaticResource BoolToVis}}" />
+
+                        <!-- Red MicrophoneSlash Dot when hardware mic is muted -->
+                        <controls:IconsaxIcon Kind="MicrophoneSlash"
+                                              Size="11.5"
+                                              Foreground="#FF453A"
+                                              Margin="4,0,3,0"
+                                              VerticalAlignment="Center"
+                                              ToolTip="Micro toàn hệ thống đang tắt tiếng (Alt + M)"
+                                              Visibility="{Binding IsMicMuted, Converter={StaticResource BoolToVis}}" />
+
+                        <!-- Trailing AI Agent Live Badge when Music or Timer occupies Center Pill -->
+                        <controls:IconsaxIcon Kind="{Binding CollapsedAgentIcon}"
+                                              Size="11.5"
+                                              Foreground="{Binding CollapsedAgentAccentBrush}"
+                                              Margin="4,0,3,0"
+                                              VerticalAlignment="Center"
+                                              ToolTip="{Binding CollapsedAgentText}"
+                                              Visibility="{Binding ShowTrailingAgentIndicator, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </Grid>
 
@@ -326,8 +445,8 @@
                 <!-- LAYER 4: EXPANDED 2-TAB WORKSPACE (684 x 272, r14+p16=R30)      -->
                 <!-- =============================================================== -->
                 <Grid x:Name="ExpandedLayer"
-                      Width="684"
-                      Height="272"
+                      Width="{Binding ActiveExpandedWidth, FallbackValue=684}"
+                      Height="{Binding ActiveExpandedHeight, FallbackValue=272}"
                       HorizontalAlignment="Center"
                       VerticalAlignment="Top"
                       Visibility="Collapsed"
@@ -379,26 +498,73 @@
                                 <StackPanel x:Name="TabButtonsPanel"
                                             Orientation="Horizontal"
                                             SizeChanged="OnTabButtonsPanelSizeChanged">
-                                    <Button x:Name="TabBtnOverview"
-                                            Command="{Binding SelectOverviewTabCommand}"
+                                    <Button x:Name="TabBtnAgents"
+                                            Command="{Binding SelectAgentsTabCommand}"
                                             Cursor="Hand"
                                             Focusable="False">
                                         <Button.Template>
                                             <ControlTemplate TargetType="Button">
                                                 <controls:SquircleBorder x:Name="TabBd"
                                                                          CornerRadius="6.5"
-                                                                         Padding="12,0"
+                                                                         Padding="10.5,0"
+                                                                         Background="Transparent">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <controls:IconsaxIcon x:Name="TabIcon"
+                                                                              Kind="Bot"
+                                                                              Size="13.2"
+                                                                              Foreground="{StaticResource TextSecondaryBrush}"
+                                                                              Margin="0,0,5.5,0"
+                                                                              VerticalAlignment="Center" />
+                                                        <TextBlock x:Name="TabTxt"
+                                                                   Text="{Binding AgentsTabHeader}"
+                                                                   FontSize="11.8"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </controls:SquircleBorder>
+                                                <ControlTemplate.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                            <Condition Binding="{Binding IsAgentsTabSelected}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter TargetName="TabBd" Property="Background" Value="#12FFFFFF" />
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#DCE3F2" />
+                                                    </MultiDataTrigger>
+                                                    <DataTrigger Binding="{Binding IsAgentsTabSelected}" Value="True">
+                                                        <Setter TargetName="TabTxt" Property="Foreground" Value="#FFFFFF" />
+                                                        <Setter TargetName="TabIcon" Property="Foreground" Value="#60A5FA" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsAgentWaitingApproval}" Value="True">
+                                                        <Setter TargetName="TabIcon" Property="Foreground" Value="#FBBF24" />
+                                                    </DataTrigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+
+                                    <Button x:Name="TabBtnOverview"
+                                            Command="{Binding SelectOverviewTabCommand}"
+                                            Cursor="Hand"
+                                            Focusable="False"
+                                            Margin="2,0,0,0">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <controls:SquircleBorder x:Name="TabBd"
+                                                                         CornerRadius="6.5"
+                                                                         Padding="10.5,0"
                                                                          Background="Transparent">
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <controls:IconsaxIcon x:Name="TabIcon"
                                                                               Kind="Setting4"
-                                                                              Size="13.5"
+                                                                              Size="13.2"
                                                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                                                              Margin="0,0,6.5,0"
+                                                                              Margin="0,0,5.5,0"
                                                                               VerticalAlignment="Center" />
                                                         <TextBlock x:Name="TabTxt"
                                                                    Text="Điều khiển"
-                                                                   FontSize="12"
+                                                                   FontSize="11.8"
                                                                    FontWeight="Medium"
                                                                    Foreground="{StaticResource TextSecondaryBrush}"
                                                                    VerticalAlignment="Center" />
@@ -426,23 +592,23 @@
                                             Command="{Binding SelectSystemTabCommand}"
                                             Cursor="Hand"
                                             Focusable="False"
-                                            Margin="2.5,0,0,0">
+                                            Margin="2,0,0,0">
                                         <Button.Template>
                                             <ControlTemplate TargetType="Button">
                                                 <controls:SquircleBorder x:Name="TabBd"
                                                                          CornerRadius="6.5"
-                                                                         Padding="12,0"
+                                                                         Padding="10.5,0"
                                                                          Background="Transparent">
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <controls:IconsaxIcon x:Name="TabIcon"
                                                                               Kind="Activity"
-                                                                              Size="13.5"
+                                                                              Size="13.2"
                                                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                                                              Margin="0,0,6.5,0"
+                                                                              Margin="0,0,5.5,0"
                                                                               VerticalAlignment="Center" />
                                                         <TextBlock x:Name="TabTxt"
                                                                    Text="Hệ thống"
-                                                                   FontSize="12"
+                                                                   FontSize="11.8"
                                                                    FontWeight="Medium"
                                                                    Foreground="{StaticResource TextSecondaryBrush}"
                                                                    VerticalAlignment="Center" />
@@ -470,23 +636,23 @@
                                             Command="{Binding SelectFileShelfTabCommand}"
                                             Cursor="Hand"
                                             Focusable="False"
-                                            Margin="2.5,0,0,0">
+                                            Margin="2,0,0,0">
                                         <Button.Template>
                                             <ControlTemplate TargetType="Button">
                                                 <controls:SquircleBorder x:Name="TabBd"
                                                                          CornerRadius="6.5"
-                                                                         Padding="12,0"
+                                                                         Padding="10.5,0"
                                                                          Background="Transparent">
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <controls:IconsaxIcon x:Name="TabIcon"
                                                                               Kind="Folder2"
-                                                                              Size="13.5"
+                                                                              Size="13.2"
                                                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                                                              Margin="0,0,6.5,0"
+                                                                              Margin="0,0,5.5,0"
                                                                               VerticalAlignment="Center" />
                                                         <TextBlock x:Name="TabTxt"
                                                                    Text="{Binding ShelfTabHeader}"
-                                                                   FontSize="12"
+                                                                   FontSize="11.8"
                                                                    FontWeight="Medium"
                                                                    Foreground="{StaticResource TextSecondaryBrush}"
                                                                    VerticalAlignment="Center" />
@@ -522,6 +688,36 @@
                                        FontWeight="Medium"
                                        VerticalAlignment="Center"
                                        Margin="0,0,10,0" />
+
+                            <Button Command="{Binding LockWorkstationCommand}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="0,0,5,0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    ToolTip="Khóa màn hình máy tính (Win + L)">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <controls:SquircleBorder x:Name="LockBd"
+                                                                 CornerRadius="8"
+                                                                 Background="Transparent">
+                                            <controls:IconsaxIcon Kind="Lock"
+                                                                  Size="15"
+                                                                  Foreground="#D4DCF0"
+                                                                  HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center" />
+                                        </controls:SquircleBorder>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="LockBd" Property="Background" Value="#24FFFFFF" />
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="LockBd" Property="Background" Value="#34FFFFFF" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
 
                             <Button Command="{Binding TogglePinCommand}"
                                     Width="32"
@@ -588,15 +784,30 @@
 
                     <!-- Spring-Animated Tab Content Stage (Pre-measured via Visibility=Hidden -> 0ms first-click hitch!) -->
                     <Grid Grid.Row="1" Margin="16,0,16,16">
-                        <!-- Tab 1: Overview (Exact 12px Gutter + 50/50 Concentric Cards) -->
-                        <Grid x:Name="TabPageOverview"
+                        <!-- Tab 0 (Default): Real-Time AI Agent Command Center -->
+                        <Grid x:Name="TabPageAgents"
                               Visibility="Visible"
                               Opacity="1"
                               IsHitTestVisible="True"
                               RenderTransformOrigin="0.5,0.5">
                             <Grid.RenderTransform>
                                 <TransformGroup>
-                                    <ScaleTransform x:Name="TabOverviewScale" ScaleX="1" ScaleY="1" />
+                                    <ScaleTransform x:Name="TabAgentsScale" ScaleX="1" ScaleY="1" />
+                                    <TranslateTransform x:Name="TabAgentsTranslate" X="0" />
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <controls:AgentMonitorView />
+                        </Grid>
+
+                        <!-- Tab 1: Overview (Exact 12px Gutter + 50/50 Concentric Cards) -->
+                        <Grid x:Name="TabPageOverview"
+                              Visibility="Hidden"
+                              Opacity="0"
+                              IsHitTestVisible="False"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform x:Name="TabOverviewScale" ScaleX="0.985" ScaleY="0.985" />
                                     <TranslateTransform x:Name="TabOverviewTranslate" X="0" />
                                 </TransformGroup>
                             </Grid.RenderTransform>

@@ -14,6 +14,10 @@
     <SolidColorBrush x:Key="NotchShellBrush" Color="#050507" />
     <SolidColorBrush x:Key="NotchRimBrush" Color="#1FFFFFFF" />
     <SolidColorBrush x:Key="NotchAlarmRimBrush" Color="#FF9F0A" />
+    <LinearGradientBrush x:Key="NotchSpecularRimBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#34FFFFFF" Offset="0.0" />
+        <GradientStop Color="#16FFFFFF" Offset="1.0" />
+    </LinearGradientBrush>
     <SolidColorBrush x:Key="FrostedCardBrush" Color="#15FFFFFF" />
     <SolidColorBrush x:Key="FrostedCardBorderBrush" Color="#20FFFFFF" />
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F7F8FC" />
@@ -26,8 +30,9 @@
     <Style x:Key="NotchGhostButton" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="BorderBrush" Value="{StaticResource NotchSpecularRimBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="5,2" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Focusable" Value="False" />
         <Setter Property="Template">
@@ -38,7 +43,11 @@
                                              BorderBrush="{TemplateBinding BorderBrush}"
                                              BorderThickness="{TemplateBinding BorderThickness}"
                                              CornerRadius="6.5"
-                                             Padding="{TemplateBinding Padding}">
+                                             Padding="{TemplateBinding Padding}"
+                                             RenderTransformOrigin="0.5,0.5">
+                        <controls:SquircleBorder.RenderTransform>
+                            <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+                        </controls:SquircleBorder.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </controls:SquircleBorder>
                     <ControlTemplate.Triggers>
@@ -47,6 +56,42 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="#34FFFFFF" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="0.955"
+                                                         Duration="0:0:0.080" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="0.955"
+                                                         Duration="0:0:0.080" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.200">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.32" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.200">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.32" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4" />
@@ -61,7 +106,7 @@
     <Style x:Key="NotchPillButton" TargetType="Button">
         <Setter Property="Background" Value="#18FFFFFF" />
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
-        <Setter Property="BorderBrush" Value="#24FFFFFF" />
+        <Setter Property="BorderBrush" Value="{StaticResource NotchSpecularRimBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="8,3" />
         <Setter Property="FontSize" Value="11.2" />
@@ -76,7 +121,11 @@
                                              BorderBrush="{TemplateBinding BorderBrush}"
                                              BorderThickness="{TemplateBinding BorderThickness}"
                                              CornerRadius="7.5"
-                                             Padding="{TemplateBinding Padding}">
+                                             Padding="{TemplateBinding Padding}"
+                                             RenderTransformOrigin="0.5,0.5">
+                        <controls:SquircleBorder.RenderTransform>
+                            <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+                        </controls:SquircleBorder.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </controls:SquircleBorder>
                     <ControlTemplate.Triggers>
@@ -86,6 +135,45 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="#3AFFFFFF" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="0.955"
+                                                         Duration="0:0:0.080" />
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="0.955"
+                                                         Duration="0:0:0.080" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.200">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.32" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Bd"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.200">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.32" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -93,7 +181,7 @@
         </Setter>
     </Style>
 
-    <!-- Sleek Modern Capsule Slider -->
+    <!-- Sleek Modern Capsule Slider (macOS Sequoia / iOS Style) -->
     <Style x:Key="NotchSleekSlider" TargetType="Slider">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="IsMoveToPointEnabled" Value="True" />
@@ -104,14 +192,22 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Slider">
                     <Grid VerticalAlignment="Center" Background="Transparent">
-                        <Border Height="5" CornerRadius="2.5" Background="#2CFFFFFF" VerticalAlignment="Center" />
+                        <Border x:Name="TrackBackground"
+                                Height="7"
+                                CornerRadius="3.5"
+                                Background="#2CFFFFFF"
+                                VerticalAlignment="Center" />
                         <Track x:Name="PART_Track">
                             <Track.DecreaseRepeatButton>
-                                <RepeatButton Command="Slider.DecreaseLarge" Focusable="False" IsTabStop="False">
+                                <RepeatButton x:Name="DecreaseBtn"
+                                              Command="Slider.DecreaseLarge"
+                                              Focusable="False"
+                                              IsTabStop="False"
+                                              Height="7">
                                     <RepeatButton.Template>
                                         <ControlTemplate TargetType="RepeatButton">
-                                            <Border Height="5"
-                                                    CornerRadius="2.5,0,0,2.5"
+                                            <Border Height="{TemplateBinding Height}"
+                                                    CornerRadius="5,0,0,5"
                                                     Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Slider}}"
                                                     VerticalAlignment="Center" />
                                         </ControlTemplate>
@@ -122,18 +218,25 @@
                                 <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False">
                                     <RepeatButton.Template>
                                         <ControlTemplate TargetType="RepeatButton">
-                                            <Border Height="5" Background="Transparent" />
+                                            <Border Background="Transparent" />
                                         </ControlTemplate>
                                     </RepeatButton.Template>
                                 </RepeatButton>
                             </Track.IncreaseRepeatButton>
                             <Track.Thumb>
-                                <Thumb x:Name="Thumb" Width="12" Height="12" Focusable="False">
+                                <Thumb x:Name="Thumb"
+                                       Width="14"
+                                       Height="14"
+                                       Focusable="False"
+                                       RenderTransformOrigin="0.5,0.5">
+                                    <Thumb.RenderTransform>
+                                        <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+                                    </Thumb.RenderTransform>
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <Ellipse x:Name="Knob"
                                                      Fill="#FFFFFF"
-                                                     Stroke="#48000000"
+                                                     Stroke="#4D000000"
                                                      StrokeThickness="1" />
                                         </ControlTemplate>
                                     </Thumb.Template>
@@ -141,6 +244,166 @@
                             </Track.Thumb>
                         </Track>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="TrackBackground" Property="CornerRadius" Value="5" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="TrackBackground"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="10"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="DecreaseBtn"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="10"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.12"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.12"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="TrackBackground"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="7"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="DecreaseBtn"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="7"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="TrackBackground" Property="CornerRadius" Value="5" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="TrackBackground"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="10"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="DecreaseBtn"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="10"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.12"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.12"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="TrackBackground"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="7"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="DecreaseBtn"
+                                                         Storyboard.TargetProperty="Height"
+                                                         To="7"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1.0"
+                                                         Duration="0:0:0.180">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -165,15 +428,182 @@
                                  Height="15"
                                  Fill="#D0D4E0"
                                  HorizontalAlignment="Left"
-                                 Margin="2,0,0,0" />
+                                 VerticalAlignment="Center"
+                                 Margin="2,0,0,0">
+                            <Ellipse.RenderTransform>
+                                <TranslateTransform x:Name="KnobTranslate" X="0" Y="0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="SwitchTrack" Property="Background" Value="#3B82F6" />
-                            <Setter TargetName="SwitchTrack" Property="BorderBrush" Value="#60A5FA" />
-                            <Setter TargetName="SwitchKnob" Property="HorizontalAlignment" Value="Right" />
-                            <Setter TargetName="SwitchKnob" Property="Margin" Value="0,0,2,0" />
-                            <Setter TargetName="SwitchKnob" Property="Fill" Value="#FFFFFF" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard x:Name="CheckStoryboard">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobTranslate"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="19"
+                                                         Duration="0:0:0.170">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <ColorAnimation Storyboard.TargetName="SwitchTrack"
+                                                         Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                         To="#3B82F6"
+                                                         Duration="0:0:0.170">
+                                            <ColorAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                        <ColorAnimation Storyboard.TargetName="SwitchTrack"
+                                                         Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                         To="#60A5FA"
+                                                         Duration="0:0:0.170">
+                                            <ColorAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                        <ColorAnimation Storyboard.TargetName="SwitchKnob"
+                                                         Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)"
+                                                         To="#FFFFFF"
+                                                         Duration="0:0:0.170">
+                                            <ColorAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard x:Name="UncheckStoryboard">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobTranslate"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="0"
+                                                         Duration="0:0:0.170">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <ColorAnimation Storyboard.TargetName="SwitchTrack"
+                                                         Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                         To="#28FFFFFF"
+                                                         Duration="0:0:0.170">
+                                            <ColorAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                        <ColorAnimation Storyboard.TargetName="SwitchTrack"
+                                                         Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                         To="#36FFFFFF"
+                                                         Duration="0:0:0.170">
+                                            <ColorAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                        <ColorAnimation Storyboard.TargetName="SwitchKnob"
+                                                         Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)"
+                                                         To="#D0D4E0"
+                                                         Duration="0:0:0.170">
+                                            <ColorAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </ColorAnimation.EasingFunction>
+                                        </ColorAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Living Breathing Status Dot (0.0% CPU when inactive or hidden) -->
+    <Style x:Key="BreathingStatusDotStyle" TargetType="Control">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Foreground" Value="{StaticResource PrivacyCamBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Control">
+                    <Grid Width="{TemplateBinding Width}"
+                          Height="{TemplateBinding Height}"
+                          ClipToBounds="False"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center">
+                        <!-- Concentric Aura Pulsing Ring -->
+                        <Ellipse x:Name="AuraRing"
+                                 Width="6.5"
+                                 Height="6.5"
+                                 Fill="{TemplateBinding Foreground}"
+                                 Opacity="0.0"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <ScaleTransform x:Name="AuraScale" ScaleX="1.0" ScaleY="1.0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+
+                        <!-- Solid Core Status Dot -->
+                        <Ellipse x:Name="CoreDot"
+                                 Width="6.5"
+                                 Height="6.5"
+                                 Fill="{TemplateBinding Foreground}"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- Active Breathing Condition: Only active when both Visible and Enabled -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsVisible" Value="True" />
+                                <Condition Property="IsEnabled" Value="True" />
+                            </MultiTrigger.Conditions>
+                            <MultiTrigger.EnterActions>
+                                <BeginStoryboard x:Name="BreathingStory">
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="AuraScale"
+                                                         Storyboard.TargetProperty="ScaleX"
+                                                         From="1.0" To="1.9"
+                                                         Duration="0:0:1.650">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="AuraScale"
+                                                         Storyboard.TargetProperty="ScaleY"
+                                                         From="1.0" To="1.9"
+                                                         Duration="0:0:1.650">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="AuraRing"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         From="0.55" To="0.0"
+                                                         Duration="0:0:1.650">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiTrigger.EnterActions>
+                            <MultiTrigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="BreathingStory" />
+                            </MultiTrigger.ExitActions>
+                        </MultiTrigger>
+                        <!-- Deactivated / Inactive State Fallback: Dimmed core and zero aura -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="CoreDot" Property="Opacity" Value="0.42" />
+                            <Setter TargetName="AuraRing" Property="Opacity" Value="0.0" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

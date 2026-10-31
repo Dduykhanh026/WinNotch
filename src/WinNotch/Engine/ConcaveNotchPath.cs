@@ -6,8 +6,15 @@ namespace WinNotch.Engine;
 
 public static class ConcaveNotchPath
 {
-    public const double HostCanvasWidth = 760.0;
-    public const double HostCanvasHeight = 320.0;
+    public const double HostCanvasWidth = 820.0;
+    public const double HostCanvasHeight = 860.0;
+
+    /// <summary>
+    /// Computes dynamic HostCanvas height to ensure concave ears and vector drop shadow never clip
+    /// when expanded to up to 2/3 monitor DIP height.
+    /// </summary>
+    public static double CalculateHostCanvasHeight(double monitorDipHeight) =>
+        Math.Max(HostCanvasHeight, Math.Ceiling(monitorDipHeight * 0.72) + 24.0);
 
     /// <summary>
     /// Builds the filled concave-top-ear, Apple G2 continuous-squircle-bottom Notch geometry flush with Y = 0.

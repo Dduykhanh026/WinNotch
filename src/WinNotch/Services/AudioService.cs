@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Dsp;
 using NAudio.Wave;
+using WinNotch.Interop;
 using WinNotch.Models;
 
 namespace WinNotch.Services;
@@ -18,6 +20,7 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
 
     private MMDeviceEnumerator? _enumerator;
     private MMDevice? _activeDevice;
+    private MMDevice? _activeCaptureDevice;
     private WasapiLoopbackCapture? _loopbackCapture;
 
     private readonly float[] _sampleRing = new float[FftLength];
@@ -28,6 +31,10 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
     private readonly double[] _smoothedBars = [0.12, 0.12, 0.12, 0.12];
     private long _lastFftEmitTicks;
     private long _suppressCallbackTicks;
+    private long _suppressCaptureCallbackTicks;
+    private long _selfSwitchingOutputTicks;
+    private string _lastRenderDeviceId = string.Empty;
+    private bool _hasInitialRenderAttach;
 
     private bool _isMediaPlayingGate;
     private bool _disposed;
@@ -35,6 +42,11 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
     public double VolumePercent { get; private set; } = 50.0;
     public bool IsMuted { get; private set; }
     public string OutputDeviceName { get; private set; } = "Loa hệ thống";
+    public int ActiveOutputDeviceCount { get; private set; } = 1;
+
+    public bool HasMicrophone { get; private set; }
+    public bool IsMicMuted { get; private set; }
+    public string MicrophoneDeviceName { get; private set; } = "Không có Micro";
 
     public event Action? StateChanged;
     public event Action<HudPayload>? VolumeHudRequested;
@@ -52,7 +64,8 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
         {
             _enumerator = new MMDeviceEnumerator();
             _enumerator.RegisterEndpointNotificationCallback(this);
-            AttachDefaultEndpoint();
+            AttachDefaultEndpoint(emitConnectionHud: false);
+            AttachDefaultCaptureEndpoint();
         }
         catch
         {
@@ -135,21 +148,242 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
 
     public void ToggleMute(bool showHud)
     {
-        StepVolume(0, toggleMute: true);
-        if (!showHud) return;
+        try
+        {
+            MMDevice? dev;
+            lock (_deviceLock) dev = _activeDevice;
+            if (dev == null) return;
+
+            _suppressCallbackTicks = Stopwatch.GetTimestamp();
+            bool nextMute = !dev.AudioEndpointVolume.Mute;
+            dev.AudioEndpointVolume.Mute = nextMute;
+            IsMuted = nextMute;
+
+            StateChanged?.Invoke();
+            if (showHud)
+            {
+                EmitVolumeHud();
+            }
+        }
+        catch
+        {
+            // Ignore transient endpoint error
+        }
     }
 
-    private void AttachDefaultEndpoint()
+    public bool CycleOutputDevice(bool showHud = true)
     {
+        try
+        {
+            MMDeviceEnumerator? enumerator = _enumerator;
+            if (enumerator == null) return false;
+
+            var endpoints = new List<(string Id, string Name)>();
+            foreach (MMDevice endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+            {
+                try
+                {
+                    endpoints.Add((endpoint.ID, endpoint.FriendlyName));
+                }
+                catch { }
+                finally
+                {
+                    try { endpoint.Dispose(); } catch { }
+                }
+            }
+
+            ActiveOutputDeviceCount = Math.Max(1, endpoints.Count);
+            if (endpoints.Count <= 1)
+            {
+                StateChanged?.Invoke();
+                if (showHud && endpoints.Count == 1)
+                {
+                    EmitAudioDeviceHud();
+                }
+                return false;
+            }
+
+            endpoints.Sort((a, b) =>
+            {
+                int cmp = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                return cmp != 0 ? cmp : string.CompareOrdinal(a.Id, b.Id);
+            });
+
+            string currentId;
+            lock (_deviceLock)
+            {
+                currentId = _activeDevice?.ID ?? _lastRenderDeviceId;
+            }
+
+            int currentIndex = endpoints.FindIndex(e => string.Equals(e.Id, currentId, StringComparison.OrdinalIgnoreCase));
+            int nextIndex = (currentIndex + 1) % endpoints.Count;
+            string targetId = endpoints[nextIndex].Id;
+
+            _selfSwitchingOutputTicks = Stopwatch.GetTimestamp();
+
+            object? comObj = null;
+            try
+            {
+                comObj = new NativeMethods.PolicyConfigClient();
+                if (comObj is NativeMethods.IPolicyConfig policyConfig)
+                {
+                    policyConfig.SetDefaultEndpoint(targetId, (int)Role.Console);
+                    policyConfig.SetDefaultEndpoint(targetId, (int)Role.Multimedia);
+                    policyConfig.SetDefaultEndpoint(targetId, (int)Role.Communications);
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            finally
+            {
+                if (comObj != null && Marshal.IsComObject(comObj))
+                {
+                    Marshal.ReleaseComObject(comObj);
+                }
+            }
+
+            AttachDefaultEndpoint(emitConnectionHud: false);
+            if (showHud)
+            {
+                EmitAudioDeviceHud();
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public void ToggleMicrophoneMute(bool showHud = true)
+    {
+        try
+        {
+            MMDeviceEnumerator? enumerator = _enumerator;
+            if (enumerator == null) return;
+
+            bool nextMute;
+            bool anyApplied = false;
+
+            lock (_deviceLock)
+            {
+                if (_activeCaptureDevice == null)
+                {
+                    AttachDefaultCaptureEndpointUnsafe();
+                }
+
+                if (_activeCaptureDevice != null)
+                {
+                    try
+                    {
+                        _ = _activeCaptureDevice.AudioEndpointVolume.Mute;
+                    }
+                    catch
+                    {
+                        AttachDefaultCaptureEndpointUnsafe();
+                    }
+                }
+
+                if (_activeCaptureDevice == null)
+                {
+                    HasMicrophone = false;
+                    if (showHud)
+                    {
+                        EmitMicrophoneHud();
+                    }
+                    return;
+                }
+
+                nextMute = !_activeCaptureDevice.AudioEndpointVolume.Mute;
+                _suppressCaptureCallbackTicks = Stopwatch.GetTimestamp();
+                _activeCaptureDevice.AudioEndpointVolume.Mute = nextMute;
+                IsMicMuted = nextMute;
+                anyApplied = true;
+            }
+
+            // Synchronize mute across all active physical/virtual capture endpoints so no meeting app leaks audio
+            try
+            {
+                foreach (MMDevice cap in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
+                {
+                    try
+                    {
+                        cap.AudioEndpointVolume.Mute = nextMute;
+                        anyApplied = true;
+                    }
+                    catch { }
+                    finally
+                    {
+                        try { cap.Dispose(); } catch { }
+                    }
+                }
+            }
+            catch { }
+
+            if (anyApplied)
+            {
+                void Notify()
+                {
+                    StateChanged?.Invoke();
+                    if (showHud)
+                    {
+                        EmitMicrophoneHud();
+                    }
+                }
+
+                if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                {
+                    Application.Current.Dispatcher.BeginInvoke(Notify);
+                }
+                else
+                {
+                    Notify();
+                }
+            }
+        }
+        catch
+        {
+            // Ignore transient capture endpoint error
+        }
+    }
+
+    private void AttachDefaultEndpoint(bool emitConnectionHud = true)
+    {
+        bool deviceChanged = false;
+
         lock (_deviceLock)
         {
             DetachEndpointUnsafe();
 
             try
             {
+                if (_enumerator != null)
+                {
+                    try
+                    {
+                        var renderList = _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+                        ActiveOutputDeviceCount = Math.Max(1, renderList.Count);
+                        foreach (MMDevice d in renderList)
+                        {
+                            try { d.Dispose(); } catch { }
+                        }
+                    }
+                    catch
+                    {
+                        ActiveOutputDeviceCount = 1;
+                    }
+                }
+
                 if (_enumerator != null && _enumerator.HasDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                 {
                     _activeDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                    string newId = _activeDevice.ID ?? string.Empty;
+                    deviceChanged = _hasInitialRenderAttach && !string.Equals(newId, _lastRenderDeviceId, StringComparison.OrdinalIgnoreCase);
+                    _lastRenderDeviceId = newId;
+                    _hasInitialRenderAttach = true;
+
                     OutputDeviceName = _activeDevice.FriendlyName;
                     VolumePercent = Math.Round(_activeDevice.AudioEndpointVolume.MasterVolumeLevelScalar * 100.0);
                     IsMuted = _activeDevice.AudioEndpointVolume.Mute;
@@ -170,7 +404,72 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
         {
             StateChanged?.Invoke();
             SyncFftCaptureState();
+            if (emitConnectionHud && deviceChanged && _settingsService.Current.EnableAudioDeviceHud)
+            {
+                EmitAudioDeviceHud();
+            }
         });
+    }
+
+    private void AttachDefaultCaptureEndpoint()
+    {
+        lock (_deviceLock)
+        {
+            AttachDefaultCaptureEndpointUnsafe();
+        }
+
+        Application.Current?.Dispatcher.BeginInvoke(() => StateChanged?.Invoke());
+    }
+
+    private void AttachDefaultCaptureEndpointUnsafe()
+    {
+        DetachCaptureEndpointUnsafe();
+
+        try
+        {
+            if (_enumerator == null)
+            {
+                HasMicrophone = false;
+                IsMicMuted = false;
+                MicrophoneDeviceName = "Không có Micro";
+                return;
+            }
+
+            MMDevice? capture = null;
+            if (_enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Communications))
+            {
+                capture = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
+            }
+            else if (_enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
+            {
+                capture = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
+            }
+            else if (_enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Console))
+            {
+                capture = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+            }
+
+            if (capture != null)
+            {
+                _activeCaptureDevice = capture;
+                HasMicrophone = true;
+                MicrophoneDeviceName = capture.FriendlyName;
+                IsMicMuted = capture.AudioEndpointVolume.Mute;
+                capture.AudioEndpointVolume.OnVolumeNotification += OnCaptureVolumeNotification;
+            }
+            else
+            {
+                HasMicrophone = false;
+                IsMicMuted = false;
+                MicrophoneDeviceName = "Không có Micro";
+            }
+        }
+        catch
+        {
+            HasMicrophone = false;
+            IsMicMuted = false;
+            MicrophoneDeviceName = "Không có Micro";
+        }
     }
 
     private void DetachEndpointUnsafe()
@@ -186,6 +485,20 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
             }
             catch { }
             _activeDevice = null;
+        }
+    }
+
+    private void DetachCaptureEndpointUnsafe()
+    {
+        if (_activeCaptureDevice != null)
+        {
+            try
+            {
+                _activeCaptureDevice.AudioEndpointVolume.OnVolumeNotification -= OnCaptureVolumeNotification;
+                _activeCaptureDevice.Dispose();
+            }
+            catch { }
+            _activeCaptureDevice = null;
         }
     }
 
@@ -232,6 +545,120 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
             IsMuted = IsMuted,
             AccentHex = IsMuted ? "#FF453A" : "#FFFFFF"
         });
+    }
+
+    private void EmitAudioDeviceHud()
+    {
+        if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+        {
+            Application.Current.Dispatcher.BeginInvoke(EmitAudioDeviceHud);
+            return;
+        }
+
+        string devName = CleanAudioDeviceName(OutputDeviceName);
+        bool isHeadphone = IsHeadphoneDevice(OutputDeviceName, devName);
+
+        VolumeHudRequested?.Invoke(new HudPayload
+        {
+            Kind = HudKind.AudioDevice,
+            Icon = isHeadphone ? IconsaxKind.Headphone : IconsaxKind.VolumeHigh,
+            Title = devName,
+            ValueText = IsMuted ? "Tắt tiếng" : $"{VolumePercent:0}%",
+            NormalizedValue = IsMuted ? 0.0 : VolumePercent / 100.0,
+            IsInteractiveSlider = false,
+            IsMuted = IsMuted,
+            AccentHex = IsMuted ? "#FF453A" : "#60A5FA"
+        });
+    }
+
+    public static string CleanAudioDeviceName(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "Loa hệ thống";
+        }
+
+        int paren = raw.IndexOf('(');
+        string clean = paren > 0 ? raw[..paren].Trim() : raw.Trim();
+        return string.IsNullOrWhiteSpace(clean) ? raw.Trim() : clean;
+    }
+
+    public static bool IsHeadphoneDevice(string? rawName, string? cleanName = null)
+    {
+        string combined = $"{rawName} {cleanName}";
+        if (string.IsNullOrWhiteSpace(combined))
+        {
+            return false;
+        }
+
+        return combined.Contains("airpod", StringComparison.OrdinalIgnoreCase)
+            || combined.Contains("bud", StringComparison.OrdinalIgnoreCase)
+            || combined.Contains("head", StringComparison.OrdinalIgnoreCase)
+            || combined.Contains("tai nghe", StringComparison.OrdinalIgnoreCase)
+            || combined.Contains("earphone", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnCaptureVolumeNotification(AudioVolumeNotificationData data)
+    {
+        double elapsedMs = ((double)(Stopwatch.GetTimestamp() - _suppressCaptureCallbackTicks) / Stopwatch.Frequency) * 1000.0;
+        bool wasSelfTriggered = elapsedMs < 180.0;
+
+        bool newMute = data.Muted;
+
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            bool changed = IsMicMuted != newMute;
+            IsMicMuted = newMute;
+            StateChanged?.Invoke();
+
+            if (!wasSelfTriggered && changed)
+            {
+                EmitMicrophoneHud();
+            }
+        });
+    }
+
+    private void EmitMicrophoneHud()
+    {
+        void Invoke()
+        {
+            if (!HasMicrophone)
+            {
+                VolumeHudRequested?.Invoke(new HudPayload
+                {
+                    Kind = HudKind.Microphone,
+                    Icon = IconsaxKind.MicrophoneSlash,
+                    Title = "Không tìm thấy Micro",
+                    ValueText = "Chưa kết nối",
+                    NormalizedValue = 0.0,
+                    IsInteractiveSlider = false,
+                    IsMuted = true,
+                    AccentHex = "#FF9F0A"
+                });
+                return;
+            }
+
+            VolumeHudRequested?.Invoke(new HudPayload
+            {
+                Kind = HudKind.Microphone,
+                Icon = IsMicMuted ? IconsaxKind.MicrophoneSlash : IconsaxKind.Microphone,
+                Title = IsMicMuted ? "Đã khóa Micro" : "Micro đã bật",
+                ValueText = IsMicMuted ? "Đang tắt tiếng" : "Đang thu âm",
+                NormalizedValue = IsMicMuted ? 0.0 : 1.0,
+                IsInteractiveSlider = false,
+                IsMuted = IsMicMuted,
+                AccentHex = IsMicMuted ? "#FF453A" : "#30D158"
+            });
+        }
+
+        if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+        {
+            Application.Current.Dispatcher.BeginInvoke(Invoke);
+        }
+        else
+        {
+            Invoke();
+        }
     }
 
     private void OnSettingsChanged(AppSettings settings)
@@ -410,15 +837,43 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
     // IMMNotificationClient implementation for audio device hot-plugging
     public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
     {
-        if (flow == DataFlow.Render && role == Role.Multimedia)
+        if (flow == DataFlow.Render && (role == Role.Multimedia || role == Role.Console))
         {
-            AttachDefaultEndpoint();
+            AttachDefaultEndpoint(emitConnectionHud: true);
+        }
+        else if (flow == DataFlow.Capture && (role == Role.Communications || role == Role.Multimedia || role == Role.Console))
+        {
+            AttachDefaultCaptureEndpoint();
         }
     }
 
-    public void OnDeviceStateChanged(string deviceId, DeviceState newState) { }
+    public void OnDeviceStateChanged(string deviceId, DeviceState newState)
+    {
+        lock (_deviceLock)
+        {
+            if (_activeCaptureDevice != null && string.Equals(_activeCaptureDevice.ID, deviceId, StringComparison.OrdinalIgnoreCase))
+            {
+                if (newState != DeviceState.Active)
+                {
+                    Application.Current?.Dispatcher.BeginInvoke(() => AttachDefaultCaptureEndpoint());
+                }
+            }
+        }
+    }
+
     public void OnDeviceAdded(string pwstrDeviceId) { }
-    public void OnDeviceRemoved(string deviceId) { }
+
+    public void OnDeviceRemoved(string deviceId)
+    {
+        lock (_deviceLock)
+        {
+            if (_activeCaptureDevice != null && string.Equals(_activeCaptureDevice.ID, deviceId, StringComparison.OrdinalIgnoreCase))
+            {
+                Application.Current?.Dispatcher.BeginInvoke(() => AttachDefaultCaptureEndpoint());
+            }
+        }
+    }
+
     public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
 
     public void Dispose()
@@ -429,6 +884,7 @@ public sealed class AudioService : IMMNotificationClient, IDisposable
         lock (_deviceLock)
         {
             DetachEndpointUnsafe();
+            DetachCaptureEndpointUnsafe();
             if (_enumerator != null)
             {
                 try

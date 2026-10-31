@@ -27,6 +27,18 @@ public partial class ShelfView : UserControl
     {
         if (sender is FrameworkElement fe && fe.DataContext is ShelfItem item)
         {
+            if (e.ClickCount == 2)
+            {
+                _pendingDragItem = null;
+                _pendingDragAll = false;
+                if (DataContext is MainNotchViewModel vm)
+                {
+                    vm.OpenShelfItemCommand.Execute(item);
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             _dragStartPoint = e.GetPosition(this);
             _pendingDragItem = item;
             _pendingDragAll = false;
@@ -92,6 +104,18 @@ public partial class ShelfView : UserControl
                 {
                     vm.StateMachine.SetSliderInteraction(false);
                 }
+            }
+        }
+    }
+
+    private void OnShelfPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (DataContext is MainNotchViewModel vm)
+            {
+                vm.PasteShelfFromClipboardCommand.Execute(null);
+                e.Handled = true;
             }
         }
     }

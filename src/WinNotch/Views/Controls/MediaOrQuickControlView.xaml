@@ -31,8 +31,19 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <Grid Grid.Column="0" Width="60" Height="60">
-                            <controls:SquircleBorder CornerRadius="12.5"
+                        <!-- Album Art Container with ScaleTransform and Center Origin -->
+                        <Grid x:Name="AlbumArtContainer"
+                              Grid.Column="0"
+                              Width="60"
+                              Height="60"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <ScaleTransform x:Name="AlbumArtScale" ScaleX="1.0" ScaleY="1.0" />
+                            </Grid.RenderTransform>
+
+                            <!-- Fallback Icon Squircle (Visible when AlbumArt is null) -->
+                            <controls:SquircleBorder x:Name="AlbumArtFallbackBorder"
+                                                     CornerRadius="12.5"
                                                      Background="#20FFFFFF"
                                                      BorderBrush="#2CFFFFFF"
                                                      BorderThickness="1"
@@ -44,13 +55,31 @@
                                                       VerticalAlignment="Center" />
                             </controls:SquircleBorder>
 
-                            <controls:SquircleBorder CornerRadius="12.5"
+                            <!-- Previous Artwork Layer (for 180ms Cross-Fade Underlay) -->
+                            <controls:SquircleBorder x:Name="PreviousAlbumArtBorder"
+                                                     CornerRadius="12.5"
+                                                     BorderBrush="#34FFFFFF"
+                                                     BorderThickness="1"
+                                                     RenderOptions.BitmapScalingMode="HighQuality"
+                                                     Visibility="Collapsed"
+                                                     Opacity="1.0">
+                                <controls:SquircleBorder.Background>
+                                    <ImageBrush x:Name="PreviousAlbumArtBrush"
+                                                Stretch="UniformToFill"
+                                                RenderOptions.BitmapScalingMode="HighQuality" />
+                                </controls:SquircleBorder.Background>
+                            </controls:SquircleBorder>
+
+                            <!-- Current Artwork Layer (Target for 180ms Cross-Fade) -->
+                            <controls:SquircleBorder x:Name="CurrentAlbumArtBorder"
+                                                     CornerRadius="12.5"
                                                      BorderBrush="#34FFFFFF"
                                                      BorderThickness="1"
                                                      RenderOptions.BitmapScalingMode="HighQuality"
                                                      Visibility="{Binding AlbumArt, Converter={StaticResource NullToVis}}">
                                 <controls:SquircleBorder.Background>
-                                    <ImageBrush ImageSource="{Binding AlbumArt}"
+                                    <ImageBrush x:Name="CurrentAlbumArtBrush"
+                                                ImageSource="{Binding AlbumArt}"
                                                 Stretch="UniformToFill"
                                                 RenderOptions.BitmapScalingMode="HighQuality" />
                                 </controls:SquircleBorder.Background>

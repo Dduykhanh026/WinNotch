@@ -22,6 +22,10 @@ public sealed partial class MainNotchViewModel : ObservableObject
     private static readonly Brush IpNormalTextBrush = CreateFrozenBrush("#F7F8FC");
     private static readonly Brush IpCopiedAccentBrush = CreateFrozenBrush("#34D399");
     private static readonly Brush IpCopiedTextBrush = CreateFrozenBrush("#6EE7B7");
+    private static readonly Brush AgentRunningAccentBrush = CreateFrozenBrush("#60A5FA");
+    private static readonly Brush AgentRunningPillBgBrush = CreateFrozenBrush("#243B82F6");
+    private static readonly Brush AgentWaitingAccentBrush = CreateFrozenBrush("#FBBF24");
+    private static readonly Brush AgentWaitingPillBgBrush = CreateFrozenBrush("#2CF59E0B");
 
     private readonly SettingsService _settingsService;
     private readonly NotchStateMachine _stateMachine;
@@ -32,19 +36,24 @@ public sealed partial class MainNotchViewModel : ObservableObject
     private readonly TimerService _timerService;
     private readonly PrivacyService _privacyService;
     private readonly SystemMonitorService _systemMonitorService;
+    private readonly NotificationService _notificationService;
+    private readonly ColorPickerService _colorPickerService;
+    private readonly AgentMonitorService _agentMonitorService;
     private readonly Action _openSettingsAction;
 
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _ipCopiedFeedbackTimer;
+    private readonly DispatcherTimer _hookCopiedFeedbackTimer;
     private bool _isUserDraggingSeekbar;
     private bool _suppressSliderPush;
     private string _currentLocalIpv4 = "—";
     private bool _isIpCopiedFeedback;
 
     public ObservableCollection<ShelfItem> ShelfItems => _fileShelfService.Items;
+    public ObservableCollection<AgentSessionItem> AgentSessions { get; } = [];
 
     [ObservableProperty] private NotchVisualState _visualState = NotchVisualState.CollapsedIdle;
-    [ObservableProperty] private NotchTab _selectedTab = NotchTab.Overview;
+    [ObservableProperty] private NotchTab _selectedTab = NotchTab.Agents;
     [ObservableProperty] private bool _isPinned;
     [ObservableProperty] private string _clockText = DateTime.Now.ToString("HH:mm");
     [ObservableProperty] private string _shortDateBadgeText = string.Empty;
@@ -67,6 +76,9 @@ public sealed partial class MainNotchViewModel : ObservableObject
     [ObservableProperty] private double _hudSliderPercent = 50.0;
     [ObservableProperty] private Brush _hudAccentBrush = Brushes.White;
     [ObservableProperty] private int _faceIdPulseToken;
+    [ObservableProperty] private int _notificationPulseToken;
+    [ObservableProperty] private int _hudArrivalPulseToken;
+    [ObservableProperty] private double _desiredAgentsHeight;
 
     // Media / Quick Control state
     [ObservableProperty] private bool _hasMediaSession;
@@ -99,6 +111,15 @@ public sealed partial class MainNotchViewModel : ObservableObject
     [ObservableProperty] private bool _hasBatteryDisplay;
     [ObservableProperty] private IconsaxKind _batteryIcon = IconsaxKind.BatteryFull;
     [ObservableProperty] private string _batteryPercentText = "100%";
+    [ObservableProperty] private string _batteryStatusDetail = "Nguồn trực tiếp";
+    [ObservableProperty] private bool _isCaffeineActive;
+    [ObservableProperty] private bool _isMicMuted;
+    [ObservableProperty] private IconsaxKind _outputDeviceIcon = IconsaxKind.Headphone;
+
+    partial void OnIsMicMutedChanged(bool value)
+    {
+        RefreshBackgroundActivityState();
+    }
 
     // File Shelf counters
     [ObservableProperty] private int _shelfCount;
@@ -113,6 +134,20 @@ public sealed partial class MainNotchViewModel : ObservableObject
     [ObservableProperty] private string _sysRamDetailText = "0.0 / 0.0 GB (0%)";
     [ObservableProperty] private int _sysRamPercent;
     [ObservableProperty] private Brush _sysRamBarBrush = RamNormalBrush;
+    [ObservableProperty] private bool _isRamOptimizing;
+    [ObservableProperty] private string _ramOptimizedFeedbackText = string.Empty;
+
+    public string RamOptimizedButtonText => IsRamOptimizing
+        ? "Đang dọn..."
+        : !string.IsNullOrEmpty(RamOptimizedFeedbackText)
+            ? RamOptimizedFeedbackText
+            : "Dọn RAM";
+
+    public Brush RamOptimizedButtonBrush => !string.IsNullOrEmpty(RamOptimizedFeedbackText)
+        ? RamWarnBrush
+        : RamNormalBrush;
+
+    private DispatcherTimer? _ramFeedbackTimer;
     [ObservableProperty] private string _sysDriveLabelText = "Ổ C: trống — GB";
     [ObservableProperty] private string _sysDriveTooltip = "Ổ đĩa hệ thống";
     [ObservableProperty] private int _sysDriveUsedPercent;
@@ -132,6 +167,18 @@ public sealed partial class MainNotchViewModel : ObservableObject
     [ObservableProperty] private Brush _sysIpTextBrush = IpNormalTextBrush;
     [ObservableProperty] private string _sysUptimeText = "00g 00p";
 
+    // Real-Time AI Agent Monitor (Tab "Agents" & Collapsed Live Activity)
+    [ObservableProperty] private AgentSessionItem? _primaryAgent;
+    [ObservableProperty] private bool _hasAnyAgents;
+    [ObservableProperty] private bool _hasActiveOrWaitingAgents;
+    [ObservableProperty] private bool _isAgentWaitingApproval;
+    [ObservableProperty] private int _activeAndWaitingAgentCount;
+    [ObservableProperty] private string _collapsedAgentText = string.Empty;
+    [ObservableProperty] private IconsaxKind _collapsedAgentIcon = IconsaxKind.Bot;
+    [ObservableProperty] private string _agentSwarmSummaryText = "Tự động theo dõi ~0% CPU • 100% Offline";
+    [ObservableProperty] private string _agentStreamCountBadge = "0 phiên";
+    [ObservableProperty] private string _agentHookButtonText = "Chép Hook";
+
     public bool IsCollapsedIdleVisible =>
         VisualState == NotchVisualState.CollapsedIdle ||
         (VisualState == NotchVisualState.GhostPassthrough && !ComputeHasBackgroundActivity());
@@ -141,16 +188,31 @@ public sealed partial class MainNotchViewModel : ObservableObject
         (VisualState == NotchVisualState.GhostPassthrough && ComputeHasBackgroundActivity());
 
     public bool IsHudVisible => VisualState == NotchVisualState.HudPop;
-    public bool IsSliderHudVisible => ActiveHud.IsInteractiveSlider && ActiveHud.Kind != HudKind.FaceIdUnlock;
-    public bool IsStandardStatusHudVisible => !ActiveHud.IsInteractiveSlider && ActiveHud.Kind != HudKind.FaceIdUnlock;
+    public bool IsSliderHudVisible => ActiveHud.IsInteractiveSlider && ActiveHud.Kind is not (HudKind.FaceIdUnlock or HudKind.Notification or HudKind.AgentAlert);
+    public bool IsStandardStatusHudVisible => !ActiveHud.IsInteractiveSlider && ActiveHud.Kind is not (HudKind.FaceIdUnlock or HudKind.Notification or HudKind.AgentAlert);
     public bool IsFaceIdHudVisible => ActiveHud.Kind == HudKind.FaceIdUnlock;
+    public bool IsNotificationHudVisible => ActiveHud.Kind is HudKind.Notification or HudKind.AgentAlert;
+    public string NotificationMetaText => string.IsNullOrWhiteSpace(ActiveHud.Subtitle)
+        ? ActiveHud.TimestampBadge
+        : $"{ActiveHud.Subtitle} · {ActiveHud.TimestampBadge}";
+    public bool IsHudColorSwatchVisible => ActiveHud.Kind == HudKind.ColorPicked;
+    public bool IsHudMiniMeterVisible => (ActiveHud.Kind is HudKind.AudioDevice or HudKind.Battery) && ActiveHud.NormalizedValue > 0;
+    public double HudMiniMeterWidth => Math.Clamp(ActiveHud.NormalizedValue, 0.0, 1.0) * 42.0;
+    public bool IsHudAlbumArtVisible => !IsHudColorSwatchVisible && ActiveHud.Thumbnail != null;
+    public bool IsHudIconVisible => !IsHudColorSwatchVisible && ActiveHud.Thumbnail == null;
+    public double ActiveExpandedWidth => _stateMachine.ActiveExpandedDimensions.Width;
+    public double ActiveExpandedHeight => _stateMachine.ActiveExpandedDimensions.Height;
     public bool IsDragReadyVisible => VisualState == NotchVisualState.DragReady;
     public bool IsExpandedVisible => VisualState == NotchVisualState.Expanded;
+    public bool IsAgentsTabSelected => SelectedTab == NotchTab.Agents;
     public bool IsOverviewTabSelected => SelectedTab == NotchTab.Overview;
     public bool IsSystemTabSelected => SelectedTab == NotchTab.System;
     public bool IsFileShelfTabSelected => SelectedTab == NotchTab.FileShelf;
     public bool HasShelfItems => ShelfCount > 0;
     public bool IsShelfEmpty => ShelfCount == 0;
+    public string AgentsTabHeader => ActiveAndWaitingAgentCount > 0 ? $"Agents ({ActiveAndWaitingAgentCount})" : "Agents";
+    public Brush CollapsedAgentAccentBrush => IsAgentWaitingApproval ? AgentWaitingAccentBrush : AgentRunningAccentBrush;
+    public Brush CollapsedAgentPillBgBrush => IsAgentWaitingApproval ? AgentWaitingPillBgBrush : AgentRunningPillBgBrush;
     public string ShelfTabHeader => ShelfCount > 0 ? $"Khay giữ file ({ShelfCount})" : "Khay giữ file";
     public string DragAllButtonText => $"Kéo tất cả ({ShelfCount})";
     public IconsaxKind PlayPauseIcon => IsMediaPlaying ? IconsaxKind.Pause : IconsaxKind.Play;
@@ -159,7 +221,9 @@ public sealed partial class MainNotchViewModel : ObservableObject
     // Camera-Free Center-Utilized Collapsed Pill Visibility Rules
     public bool HasAlbumArt => AlbumArt != null;
     public bool ShowCollapsedTimerPill => HasActiveTimer || IsTimerAlarmRinging;
-    public bool IsCollapsedIdleMode => !IsMediaPlaying && !ShowCollapsedTimerPill;
+    public bool IsCollapsedIdleMode => !IsMediaPlaying && !ShowCollapsedTimerPill && !HasActiveOrWaitingAgents;
+    public bool IsCollapsedAgentOnlyMode => !IsMediaPlaying && !ShowCollapsedTimerPill && HasActiveOrWaitingAgents;
+    public bool ShowTrailingAgentIndicator => (IsMediaPlaying || ShowCollapsedTimerPill) && HasActiveOrWaitingAgents;
     public bool IsCollapsedMusicMode => IsMediaPlaying;
     public bool IsCollapsedTimerOnlyMode => !IsMediaPlaying && ShowCollapsedTimerPill;
     public bool IsCollapsedDualMode => IsMediaPlaying && ShowCollapsedTimerPill;
@@ -178,6 +242,9 @@ public sealed partial class MainNotchViewModel : ObservableObject
         TimerService timerService,
         PrivacyService privacyService,
         SystemMonitorService systemMonitorService,
+        NotificationService notificationService,
+        ColorPickerService colorPickerService,
+        AgentMonitorService agentMonitorService,
         Action openSettingsAction)
     {
         _settingsService = settingsService;
@@ -189,7 +256,16 @@ public sealed partial class MainNotchViewModel : ObservableObject
         _timerService = timerService;
         _privacyService = privacyService;
         _systemMonitorService = systemMonitorService;
+        _notificationService = notificationService;
+        _colorPickerService = colorPickerService;
+        _agentMonitorService = agentMonitorService;
         _openSettingsAction = openSettingsAction;
+
+        _selectedTab = _settingsService.Current.DefaultOpenAgentsTab ? NotchTab.Agents : NotchTab.Overview;
+
+        _colorPickerService.ColorPickedHudRequested += payload => ShowHud(payload);
+        _agentMonitorService.SnapshotUpdated += OnAgentSnapshotUpdated;
+        _agentMonitorService.AgentHudRequested += payload => ShowHud(payload, forcePreemptExpanded: false);
 
         ShowCollapsedNetworkSpeed = _settingsService.Current.ShowCollapsedNetworkSpeed;
 
@@ -201,14 +277,29 @@ public sealed partial class MainNotchViewModel : ObservableObject
             RefreshIpButtonPresentation();
         };
 
+        _hookCopiedFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.8) };
+        _hookCopiedFeedbackTimer.Tick += (_, _) =>
+        {
+            _hookCopiedFeedbackTimer.Stop();
+            AgentHookButtonText = "Chép Hook";
+        };
+
         _stateMachine.StateChanged += (st, _, _) =>
         {
             VisualState = st;
             _systemMonitorService.SetDeepMonitoringActive(st == NotchVisualState.Expanded);
+            OnPropertyChanged(nameof(ActiveExpandedWidth));
+            OnPropertyChanged(nameof(ActiveExpandedHeight));
             NotifyVisibilityProperties();
         };
         _stateMachine.PinnedChanged += pinned => IsPinned = pinned;
         _stateMachine.RequestTabSwitch += tab => SelectTab(tab);
+
+        _settingsService.SettingsChanged += _ =>
+        {
+            OnPropertyChanged(nameof(ActiveExpandedWidth));
+            OnPropertyChanged(nameof(ActiveExpandedHeight));
+        };
 
         _audioService.StateChanged += SyncAudioState;
         _audioService.VolumeHudRequested += ShowHud;
@@ -224,6 +315,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
         _timerService.StateChanged += SyncTimerState;
         _privacyService.StateChanged += SyncPrivacyAndMetrics;
         _systemMonitorService.SnapshotUpdated += OnSystemTelemetryUpdated;
+        _notificationService.NotificationHudRequested += ShowHud;
         _settingsService.SettingsChanged += s =>
         {
             ShowCollapsedNetworkSpeed = s.ShowCollapsedNetworkSpeed;
@@ -241,6 +333,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
         SyncTimerState();
         SyncPrivacyAndMetrics();
         OnSystemTelemetryUpdated(_systemMonitorService.LatestSnapshot);
+        OnAgentSnapshotUpdated(_agentMonitorService.LatestSnapshot);
         RefreshLastMediaAppHint();
     }
 
@@ -249,6 +342,13 @@ public sealed partial class MainNotchViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSliderHudVisible));
         OnPropertyChanged(nameof(IsStandardStatusHudVisible));
         OnPropertyChanged(nameof(IsFaceIdHudVisible));
+        OnPropertyChanged(nameof(IsNotificationHudVisible));
+        OnPropertyChanged(nameof(NotificationMetaText));
+        OnPropertyChanged(nameof(IsHudColorSwatchVisible));
+        OnPropertyChanged(nameof(IsHudMiniMeterVisible));
+        OnPropertyChanged(nameof(HudMiniMeterWidth));
+        OnPropertyChanged(nameof(IsHudAlbumArtVisible));
+        OnPropertyChanged(nameof(IsHudIconVisible));
     }
 
     partial void OnIsPinnedChanged(bool value)
@@ -258,6 +358,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
 
     partial void OnSelectedTabChanged(NotchTab value)
     {
+        OnPropertyChanged(nameof(IsAgentsTabSelected));
         OnPropertyChanged(nameof(IsOverviewTabSelected));
         OnPropertyChanged(nameof(IsSystemTabSelected));
         OnPropertyChanged(nameof(IsFileShelfTabSelected));
@@ -325,6 +426,9 @@ public sealed partial class MainNotchViewModel : ObservableObject
         PositionLabel = FormatTimeSpan(TimeSpan.FromSeconds(targetSeconds));
         await _mediaService.SeekToSecondsAsync(targetSeconds);
     }
+
+    [RelayCommand]
+    private void SelectAgentsTab() => SelectTab(NotchTab.Agents);
 
     [RelayCommand]
     private void SelectOverviewTab() => SelectTab(NotchTab.Overview);
@@ -421,6 +525,18 @@ public sealed partial class MainNotchViewModel : ObservableObject
         catch { }
     }
 
+    [RelayCommand]
+    private void ToggleCaffeine() => _displayPowerService.ToggleCaffeine(showHud: true);
+
+    [RelayCommand]
+    private void ToggleMicMute() => _audioService.ToggleMicrophoneMute(showHud: true);
+
+    [RelayCommand]
+    private void CycleAudioOutput() => _audioService.CycleOutputDevice(showHud: true);
+
+    public void StepVolume(int deltaPercent) => _audioService.StepVolume(deltaPercent, toggleMute: false);
+    public void StepBrightness(int deltaPercent) => _displayPowerService.StepBrightness(deltaPercent);
+
     // Pomodoro / Timer Commands
     [RelayCommand]
     private void StartTimer5() => _timerService.StartPresetMinutes(5);
@@ -440,7 +556,19 @@ public sealed partial class MainNotchViewModel : ObservableObject
     [RelayCommand]
     private void ResetTimer() => _timerService.Reset();
 
+    [RelayCommand]
+    public void StepTimerMinutes(int deltaMinutes) => _timerService.StepMinutes(deltaMinutes);
+
     // Shelf Commands
+    [RelayCommand]
+    public void PasteShelfFromClipboard() => _fileShelfService.PasteFromClipboard();
+
+    [RelayCommand]
+    private void OpenShelfItem(ShelfItem? item) => _fileShelfService.OpenItem(item);
+
+    [RelayCommand]
+    private void RevealShelfItemInExplorer(ShelfItem? item) => _fileShelfService.RevealInExplorer(item);
+
     [RelayCommand]
     private void RemoveShelfItem(ShelfItem? item) => _fileShelfService.RemoveItem(item);
 
@@ -449,6 +577,56 @@ public sealed partial class MainNotchViewModel : ObservableObject
 
     [RelayCommand]
     private void ClearShelf() => _fileShelfService.ClearAll();
+
+    [RelayCommand]
+    public async Task OptimizeRamAsync()
+    {
+        if (IsRamOptimizing) return;
+        IsRamOptimizing = true;
+        OnPropertyChanged(nameof(RamOptimizedButtonText));
+        OnPropertyChanged(nameof(RamOptimizedButtonBrush));
+
+        try
+        {
+            long reclaimedBytes = await _systemMonitorService.OptimizeWorkingSetAsync();
+            long reclaimedMb = reclaimedBytes / (1024L * 1024L);
+
+            string feedback = reclaimedMb > 0 ? $"-{reclaimedMb} MB" : "Đã tối ưu";
+            RamOptimizedFeedbackText = feedback;
+            OnPropertyChanged(nameof(RamOptimizedButtonText));
+            OnPropertyChanged(nameof(RamOptimizedButtonBrush));
+
+            ShowHud(new HudPayload
+            {
+                Kind = HudKind.MemoryOptimized,
+                Icon = IconsaxKind.Broom,
+                Title = "Đã dọn dẹp RAM",
+                ValueText = feedback,
+                AccentHex = "#38BDF8"
+            });
+
+            _ramFeedbackTimer?.Stop();
+            _ramFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+            _ramFeedbackTimer.Tick += (_, _) =>
+            {
+                _ramFeedbackTimer.Stop();
+                RamOptimizedFeedbackText = string.Empty;
+                OnPropertyChanged(nameof(RamOptimizedButtonText));
+                OnPropertyChanged(nameof(RamOptimizedButtonBrush));
+            };
+            _ramFeedbackTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[RamOptimizer] Failed: {ex.Message}");
+        }
+        finally
+        {
+            IsRamOptimizing = false;
+            OnPropertyChanged(nameof(RamOptimizedButtonText));
+            OnPropertyChanged(nameof(RamOptimizedButtonBrush));
+        }
+    }
 
     public void TriggerFaceIdUnlockHud()
     {
@@ -463,9 +641,105 @@ public sealed partial class MainNotchViewModel : ObservableObject
         }, forcePreemptExpanded: true);
     }
 
+    public void TriggerPreviewNotificationHud(bool? overrideHidePreview = null) =>
+        _notificationService.TriggerPreviewNotification(overrideHidePreview);
+
+    public void TriggerPreviewAgentHud() =>
+        _agentMonitorService.TriggerPreviewAgentHud();
+
+    [RelayCommand]
+    private void FocusPrimaryAgent()
+    {
+        if (!IsPinned)
+            _stateMachine.CollapseImmediately();
+        _agentMonitorService.FocusAgentHostWindow(PrimaryAgent?.SessionId);
+    }
+
+    [RelayCommand]
+    private void FocusAgentSession(string? sessionId)
+    {
+        if (!IsPinned)
+            _stateMachine.CollapseImmediately();
+        _agentMonitorService.FocusAgentHostWindow(sessionId);
+    }
+
+    [RelayCommand]
+    private void CopyAgentHook()
+    {
+        if (_agentMonitorService.CopyHooksConfigToClipboard())
+        {
+            AgentHookButtonText = "Đã chép!";
+            _hookCopiedFeedbackTimer.Stop();
+            _hookCopiedFeedbackTimer.Start();
+        }
+    }
+
+    [RelayCommand]
+    private void ClearCompletedAgents() => _agentMonitorService.ClearCompletedSessions();
+
+    [RelayCommand]
+    private void ActivateNotificationHud()
+    {
+        if (ActiveHud.Kind == HudKind.AgentAlert)
+        {
+            HudPayload agentTarget = ActiveHud;
+            _stateMachine.DismissActiveHud();
+            _agentMonitorService.FocusAgentHostWindow(agentTarget.SourceAumid);
+            return;
+        }
+
+        if (ActiveHud.Kind != HudKind.Notification)
+            return;
+
+        HudPayload target = ActiveHud;
+        _stateMachine.DismissActiveHud();
+        _notificationService.ActivateNotification(target);
+    }
+
+    [RelayCommand]
+    private void DismissNotificationHud()
+    {
+        _stateMachine.DismissActiveHud();
+    }
+
+    [RelayCommand]
+    private void StartColorPicker()
+    {
+        _colorPickerService.StartColorPicker();
+    }
+
+    public void EmitCapsLockHud(bool isOn)
+    {
+        ShowHud(new HudPayload
+        {
+            Kind = HudKind.CapsLock,
+            Icon = IconsaxKind.Lock,
+            Title = "Caps Lock",
+            ValueText = isOn ? "Đang bật" : "Đã tắt",
+            NormalizedValue = isOn ? 1.0 : 0.0,
+            IsInteractiveSlider = false,
+            AccentHex = isOn ? "#30D158" : "#8E98AE"
+        });
+    }
+
     private void ShowHud(HudPayload payload, bool forcePreemptExpanded = false)
     {
-        bool isFaceId = payload.Kind == HudKind.FaceIdUnlock;
+        HudShapeKind shape = payload.Kind switch
+        {
+            HudKind.FaceIdUnlock => HudShapeKind.FaceIdSquare,
+            HudKind.Notification or HudKind.AgentAlert => HudShapeKind.NotificationBanner,
+            _ => HudShapeKind.CompactPill
+        };
+
+        double durationSec = payload.Kind switch
+        {
+            HudKind.FaceIdUnlock => 2.18,
+            HudKind.Notification => 4.35,
+            HudKind.AgentAlert => 4.80,
+            HudKind.ColorPicked => 2.1,
+            HudKind.CapsLock => 1.35,
+            _ => 2.0
+        };
 
         _suppressSliderPush = true;
         try
@@ -473,6 +747,12 @@ public sealed partial class MainNotchViewModel : ObservableObject
             ActiveHud = payload;
             HudSliderPercent = Math.Round(payload.NormalizedValue * 100.0);
             HudAccentBrush = ParseBrush(payload.AccentHex);
+            HudArrivalPulseToken++;
+
+            if (payload.Kind is HudKind.Notification or HudKind.AgentAlert)
+            {
+                NotificationPulseToken++;
+            }
         }
         finally
         {
@@ -480,8 +760,8 @@ public sealed partial class MainNotchViewModel : ObservableObject
         }
 
         _stateMachine.TriggerHudPop(
-            isFaceIdSquare: isFaceId,
-            durationSeconds: isFaceId ? 2.18 : 2.0,
+            shapeKind: shape,
+            durationSeconds: durationSec,
             forcePreemptExpanded: forcePreemptExpanded);
     }
 
@@ -517,6 +797,8 @@ public sealed partial class MainNotchViewModel : ObservableObject
         try
         {
             OutputDeviceName = _audioService.OutputDeviceName;
+            OutputDeviceIcon = AudioService.IsHeadphoneDevice(OutputDeviceName) ? IconsaxKind.Headphone : IconsaxKind.VolumeHigh;
+            IsMicMuted = _audioService.IsMicMuted;
             QuickVolumePercent = _audioService.VolumePercent;
             IsMuted = _audioService.IsMuted;
             VolumeIcon = IsMuted
@@ -538,6 +820,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
         {
             IsBrightnessSupported = _displayPowerService.IsBrightnessSupported;
             QuickBrightnessPercent = _displayPowerService.BrightnessPercent;
+            IsCaffeineActive = _displayPowerService.IsCaffeineActive;
         }
         finally
         {
@@ -616,6 +899,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
     private void UpdateMetricsBanner()
     {
         HasBatteryDisplay = _displayPowerService.HasBattery;
+        BatteryStatusDetail = _displayPowerService.BatteryStatusDetail;
 
         if (_displayPowerService.HasBattery)
         {
@@ -739,20 +1023,101 @@ public sealed partial class MainNotchViewModel : ObservableObject
         LastMediaAppButtonText = File.Exists(spotifyPath) ? "Mở Spotify" : "Mở Trình phát nhạc";
     }
 
+    private void OnAgentSnapshotUpdated(AgentDashboardSnapshot snap)
+    {
+        AgentSessions.Clear();
+        foreach (AgentSessionItem item in snap.Sessions)
+        {
+            AgentSessions.Add(item);
+        }
+
+        PrimaryAgent = snap.PrimarySession;
+        HasAnyAgents = snap.HasAnySessions;
+        HasActiveOrWaitingAgents = snap.HasActiveOrWaiting;
+        IsAgentWaitingApproval = snap.IsCollapsedWaiting;
+        ActiveAndWaitingAgentCount = snap.ActiveCount + snap.WaitingApprovalCount;
+        CollapsedAgentText = FormatCollapsedAgentText(snap);
+        CollapsedAgentIcon = snap.PrimarySession?.Provider == AgentProvider.Teamwork || snap.IsCollapsedWaiting
+            ? IconsaxKind.Hierarchy
+            : IconsaxKind.Bot;
+
+        AgentStreamCountBadge = $"{snap.Sessions.Count} phiên";
+
+        var parts = new List<string>(3);
+        if (snap.WaitingApprovalCount > 0) parts.Add($"{snap.WaitingApprovalCount} chờ duyệt");
+        if (snap.ActiveCount > 0) parts.Add($"{snap.ActiveCount} đang chạy");
+        if (snap.CompletedRecentCount > 0) parts.Add($"{snap.CompletedRecentCount} hoàn tất");
+        AgentSwarmSummaryText = parts.Count > 0
+            ? string.Join(" • ", parts)
+            : "Tự động theo dõi ~0% CPU • 100% Offline";
+
+        OnPropertyChanged(nameof(AgentsTabHeader));
+        OnPropertyChanged(nameof(CollapsedAgentAccentBrush));
+        OnPropertyChanged(nameof(CollapsedAgentPillBgBrush));
+        RefreshBackgroundActivityState();
+    }
+
+    private static string FormatCollapsedAgentText(AgentDashboardSnapshot snap)
+    {
+        if (!snap.HasActiveOrWaiting) return string.Empty;
+
+        string projectName = ExtractProjectName(snap.PrimarySession);
+
+        if (snap.IsCollapsedWaiting)
+        {
+            return $"{projectName} · Chờ duyệt!";
+        }
+
+        if (!string.IsNullOrWhiteSpace(snap.CollapsedBadgeText))
+        {
+            int dotIdx = snap.CollapsedBadgeText.IndexOf("·", StringComparison.Ordinal);
+            if (dotIdx >= 0)
+            {
+                string suffix = snap.CollapsedBadgeText.Substring(dotIdx).Trim();
+                return $"{projectName} {suffix}";
+            }
+            return $"{projectName} · {snap.CollapsedBadgeText.Trim()}";
+        }
+
+        return $"{projectName} · Đang chạy";
+    }
+
+    private static string ExtractProjectName(AgentSessionItem? session)
+    {
+        if (session == null) return "WinNotch";
+        if (!string.IsNullOrWhiteSpace(session.WorkspaceHint))
+        {
+            try
+            {
+                string trimmed = session.WorkspaceHint.TrimEnd('\\', '/');
+                string? name = Path.GetFileName(trimmed);
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+            catch { }
+        }
+        return !string.IsNullOrWhiteSpace(session.DisplayName) && session.DisplayName != "AI Agent"
+            ? session.DisplayName
+            : "WinNotch";
+    }
+
     private bool ComputeHasBackgroundActivity() =>
-        IsMediaPlaying || HasActiveTimer || IsTimerAlarmRinging || IsCameraActive || IsMicrophoneActive;
+        IsMediaPlaying || HasActiveTimer || IsTimerAlarmRinging || HasActiveOrWaitingAgents || IsCameraActive || IsMicrophoneActive;
 
     private void RefreshBackgroundActivityState()
     {
         bool hasActivity = ComputeHasBackgroundActivity();
-        CollapsedContentKind kind = (IsMediaPlaying, ShowCollapsedTimerPill) switch
+        CollapsedContentKind kind = (IsMediaPlaying, ShowCollapsedTimerPill, HasActiveOrWaitingAgents) switch
         {
-            (true, true) => CollapsedContentKind.MusicAndTimer,
-            (true, false) => CollapsedContentKind.MusicOnly,
-            (false, true) => CollapsedContentKind.TimerOnly,
+            (true, true, _) => CollapsedContentKind.MusicAndTimer,
+            (true, false, _) => CollapsedContentKind.MusicOnly,
+            (false, true, _) => CollapsedContentKind.TimerOnly,
+            (false, false, true) => CollapsedContentKind.AgentOnly,
             _ => CollapsedContentKind.Idle
         };
-        int privacyDots = (IsCameraActive ? 1 : 0) + (IsMicrophoneActive ? 1 : 0);
+        int privacyDots = (IsCameraActive ? 1 : 0) +
+                          (IsMicrophoneActive ? 1 : 0) +
+                          (IsMicMuted ? 1 : 0) +
+                          (ShowTrailingAgentIndicator ? 1 : 0);
 
         _stateMachine.SetBackgroundActivity(hasActivity, kind, privacyDots);
         NotifyVisibilityProperties();
@@ -767,6 +1132,8 @@ public sealed partial class MainNotchViewModel : ObservableObject
         OnPropertyChanged(nameof(IsExpandedVisible));
         OnPropertyChanged(nameof(ShowCollapsedTimerPill));
         OnPropertyChanged(nameof(IsCollapsedIdleMode));
+        OnPropertyChanged(nameof(IsCollapsedAgentOnlyMode));
+        OnPropertyChanged(nameof(ShowTrailingAgentIndicator));
         OnPropertyChanged(nameof(IsCollapsedMusicMode));
         OnPropertyChanged(nameof(IsCollapsedTimerOnlyMode));
         OnPropertyChanged(nameof(IsCollapsedDualMode));
