@@ -15,6 +15,8 @@ public partial class MediaOrQuickControlView : UserControl
     private bool _isDraggingThumb;
     private MainNotchViewModel? _boundVm;
     private ImageSource? _lastKnownArt;
+    private int _playbackStateGeneration;
+    private System.Windows.Threading.DispatcherTimer? _crossFadeCleanupTimer;
 
     public MediaOrQuickControlView()
     {
@@ -61,6 +63,11 @@ public partial class MediaOrQuickControlView : UserControl
             CurrentAlbumArtBorder.Opacity = 1.0;
         }
 
+        if (CurrentAlbumArtBrush != null && vm.AlbumArt != null)
+        {
+            CurrentAlbumArtBrush.ImageSource = vm.AlbumArt;
+        }
+
         if (PreviousAlbumArtBorder != null)
         {
             PreviousAlbumArtBorder.Visibility = Visibility.Collapsed;
@@ -77,6 +84,24 @@ public partial class MediaOrQuickControlView : UserControl
         {
             _boundVm.PropertyChanged -= OnViewModelPropertyChanged;
             _boundVm = null;
+        }
+
+        _playbackStateGeneration++;
+        _crossFadeCleanupTimer?.Stop();
+
+        // Cleanly cancel and detach in-flight animation clocks upon unbind/unload
+        AlbumArtScale?.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        AlbumArtScale?.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        AlbumArtContainer?.BeginAnimation(OpacityProperty, null);
+        CurrentAlbumArtBorder?.BeginAnimation(OpacityProperty, null);
+
+        if (PreviousAlbumArtBorder != null)
+        {
+            PreviousAlbumArtBorder.Visibility = Visibility.Collapsed;
+        }
+        if (PreviousAlbumArtBrush != null)
+        {
+            PreviousAlbumArtBrush.ImageSource = null;
         }
     }
 
@@ -99,15 +124,21 @@ public partial class MediaOrQuickControlView : UserControl
         if (AlbumArtScale == null || AlbumArtContainer == null)
             return;
 
+        int generation = ++_playbackStateGeneration;
+
         double targetScale = isPlaying ? 1.0 : 0.90;
         double targetOpacity = isPlaying ? 1.0 : 0.84;
 
-        if (!animate)
-        {
-            AlbumArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            AlbumArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-            AlbumArtContainer.BeginAnimation(OpacityProperty, null);
+        // Synchronously detach in-flight animation clocks
+        AlbumArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        AlbumArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        AlbumArtContainer.BeginAnimation(OpacityProperty, null);
 
+        // Offscreen / headless test harness presentation guard:
+        // When not animated, not loaded, not visible, or lacking an active HwndSource presentation source,
+        // snap resting transforms and opacity immediately without scheduling compositor DoubleAnimations.
+        if (!animate || !IsLoaded || !IsVisible || PresentationSource.FromVisual(this) == null)
+        {
             AlbumArtScale.ScaleX = targetScale;
             AlbumArtScale.ScaleY = targetScale;
             AlbumArtContainer.Opacity = targetOpacity;
@@ -128,6 +159,9 @@ public partial class MediaOrQuickControlView : UserControl
 
             scaleAnim.Completed += (_, _) =>
             {
+                if (_playbackStateGeneration != generation)
+                    return;
+
                 AlbumArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 AlbumArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
                 AlbumArtScale.ScaleX = targetScale;
@@ -136,6 +170,9 @@ public partial class MediaOrQuickControlView : UserControl
 
             opacityAnim.Completed += (_, _) =>
             {
+                if (_playbackStateGeneration != generation)
+                    return;
+
                 AlbumArtContainer.BeginAnimation(OpacityProperty, null);
                 AlbumArtContainer.Opacity = targetOpacity;
             };
@@ -158,6 +195,9 @@ public partial class MediaOrQuickControlView : UserControl
 
             scaleAnim.Completed += (_, _) =>
             {
+                if (_playbackStateGeneration != generation)
+                    return;
+
                 AlbumArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 AlbumArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
                 AlbumArtScale.ScaleX = targetScale;
@@ -166,6 +206,9 @@ public partial class MediaOrQuickControlView : UserControl
 
             opacityAnim.Completed += (_, _) =>
             {
+                if (_playbackStateGeneration != generation)
+                    return;
+
                 AlbumArtContainer.BeginAnimation(OpacityProperty, null);
                 AlbumArtContainer.Opacity = targetOpacity;
             };
@@ -182,74 +225,105 @@ public partial class MediaOrQuickControlView : UserControl
             CurrentAlbumArtBrush == null || PreviousAlbumArtBrush == null)
             return;
 
-        if (PreviousAlbumArtBorder.Visibility == Visibility.Visible ||
-            PreviousAlbumArtBrush.ImageSource != null ||
-            CurrentAlbumArtBorder.HasAnimatedProperties)
-        {
-            CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, null);
-            CurrentAlbumArtBorder.Opacity = 1.0;
-            PreviousAlbumArtBorder.Visibility = Visibility.Collapsed;
-            PreviousAlbumArtBrush.ImageSource = null;
-        }
-
         ImageSource? oldArt = _lastKnownArt;
-        _lastKnownArt = newArt;
-
         if (ReferenceEquals(oldArt, newArt))
             return;
 
+        _lastKnownArt = newArt;
+
+        // Synchronously pre-detach prior in-flight animation clocks on CurrentAlbumArtBorder
+        _crossFadeCleanupTimer?.Stop();
+        CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, null);
+
+        void FinalizeCrossFadeIfCurrent()
+        {
+            if (!ReferenceEquals(_lastKnownArt, newArt))
+                return;
+
+            _crossFadeCleanupTimer?.Stop();
+            if (PreviousAlbumArtBorder != null)
+                PreviousAlbumArtBorder.Visibility = Visibility.Collapsed;
+            if (PreviousAlbumArtBrush != null)
+                PreviousAlbumArtBrush.ImageSource = null;
+            if (CurrentAlbumArtBorder != null)
+            {
+                CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, null);
+                CurrentAlbumArtBorder.Opacity = 1.0;
+            }
+        }
+
+        void ScheduleDeterministicClockDetach()
+        {
+            _crossFadeCleanupTimer ??= new System.Windows.Threading.DispatcherTimer(
+                System.Windows.Threading.DispatcherPriority.Send)
+            {
+                Interval = TimeSpan.FromMilliseconds(185)
+            };
+            _crossFadeCleanupTimer.Stop();
+            _crossFadeCleanupTimer = new System.Windows.Threading.DispatcherTimer(
+                TimeSpan.FromMilliseconds(185),
+                System.Windows.Threading.DispatcherPriority.Send,
+                (_, _) => FinalizeCrossFadeIfCurrent(),
+                Dispatcher);
+            _crossFadeCleanupTimer.Start();
+        }
+
         if (oldArt != null && newArt != null)
         {
-            // Smooth 180ms cross-fade between old and new album cover art
+            // 1. Synchronous state setup: outgoing artwork underlay + incoming artwork overlay
             PreviousAlbumArtBrush.ImageSource = oldArt;
             PreviousAlbumArtBorder.Visibility = Visibility.Visible;
             PreviousAlbumArtBorder.Opacity = 1.0;
+            CurrentAlbumArtBrush.ImageSource = newArt;
 
+            if (!IsLoaded || PresentationSource.FromVisual(this) == null)
+            {
+                FinalizeCrossFadeIfCurrent();
+                return;
+            }
+
+            // 2. Smooth 180ms cross-fade animation between outgoing and incoming artwork
+            CurrentAlbumArtBorder.Opacity = 0.0;
             var crossFadeAnim = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(180))
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
 
-            crossFadeAnim.Completed += (_, _) =>
-            {
-                if (ReferenceEquals(_lastKnownArt, newArt))
-                {
-                    PreviousAlbumArtBorder.Visibility = Visibility.Collapsed;
-                    PreviousAlbumArtBrush.ImageSource = null;
-                    CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, null);
-                    CurrentAlbumArtBorder.Opacity = 1.0;
-                }
-            };
+            crossFadeAnim.Completed += (_, _) => FinalizeCrossFadeIfCurrent();
 
             CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, crossFadeAnim);
+            ScheduleDeterministicClockDetach();
         }
         else if (newArt != null && oldArt == null)
         {
-            // Smooth 180ms fade in from null artwork
+            // Fade in from null / empty artwork
             PreviousAlbumArtBorder.Visibility = Visibility.Collapsed;
             PreviousAlbumArtBrush.ImageSource = null;
+            CurrentAlbumArtBrush.ImageSource = newArt;
 
+            if (!IsLoaded || PresentationSource.FromVisual(this) == null)
+            {
+                FinalizeCrossFadeIfCurrent();
+                return;
+            }
+
+            CurrentAlbumArtBorder.Opacity = 0.0;
             var fadeInAnim = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(180))
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
 
-            fadeInAnim.Completed += (_, _) =>
-            {
-                if (ReferenceEquals(_lastKnownArt, newArt))
-                {
-                    CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, null);
-                    CurrentAlbumArtBorder.Opacity = 1.0;
-                }
-            };
+            fadeInAnim.Completed += (_, _) => FinalizeCrossFadeIfCurrent();
 
             CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, fadeInAnim);
+            ScheduleDeterministicClockDetach();
         }
         else
         {
             // Artwork became null (fallback icon is shown via NullToInvVis)
             PreviousAlbumArtBorder.Visibility = Visibility.Collapsed;
             PreviousAlbumArtBrush.ImageSource = null;
+            CurrentAlbumArtBrush.ImageSource = null;
             CurrentAlbumArtBorder.BeginAnimation(OpacityProperty, null);
             CurrentAlbumArtBorder.Opacity = 1.0;
         }

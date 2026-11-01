@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Media;
 
 namespace WinNotch.Models;
@@ -56,19 +57,83 @@ public sealed class AgentSessionItem
 
     public string SessionId { get; init; } = string.Empty;
     public string ParentSessionId { get; init; } = string.Empty;
+    public string GroupId { get; init; } = string.Empty;
     public AgentProvider Provider { get; init; } = AgentProvider.Antigravity;
+    public string ProjectName { get; init; } = string.Empty;
     public string DisplayName { get; init; } = "AI Agent";
     public string WorkspaceHint { get; init; } = string.Empty;
     public AgentRunState State { get; init; } = AgentRunState.Idle;
     public string CurrentActionText { get; init; } = "Đang chờ tác vụ...";
+    public int ProgressPercent { get; init; }
     public DateTime StartedAtUtc { get; init; } = DateTime.UtcNow;
+    public DateTime ActiveTurnStartedAtUtc { get; init; }
+    public DateTime? TurnCompletedAtUtc { get; init; }
     public DateTime LastUpdatedAtUtc { get; init; } = DateTime.UtcNow;
     public bool IsSubagent { get; init; }
+    public int ChildCount { get; init; }
+    public bool IsExpanded { get; init; } = true;
     public int ProcessId { get; init; }
     public IntPtr TargetWindowHandle { get; init; }
 
     public bool IsActive => State is AgentRunState.Working or AgentRunState.Thinking or AgentRunState.WaitingApproval;
     public bool IsWaitingApproval => State == AgentRunState.WaitingApproval;
+    public bool IsParentRow => !IsSubagent;
+    public bool HasChildren => !IsSubagent && ChildCount > 0;
+    public string ExpandChevron => IsExpanded ? "▾" : "▸";
+
+    public string ResolvedProjectName
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(ProjectName))
+                return ProjectName;
+
+            if (!string.IsNullOrWhiteSpace(WorkspaceHint))
+            {
+                try
+                {
+                    string trimmed = WorkspaceHint.TrimEnd('\\', '/');
+                    string? leaf = Path.GetFileName(trimmed);
+                    if (!string.IsNullOrWhiteSpace(leaf))
+                        return leaf;
+                }
+                catch { }
+            }
+
+            if (!string.IsNullOrWhiteSpace(DisplayName) &&
+                !DisplayName.StartsWith("Phiên ", StringComparison.Ordinal) &&
+                DisplayName != "AI Agent")
+            {
+                return DisplayName;
+            }
+
+            return "Dự án AI";
+        }
+    }
+
+    /// <summary>
+    /// Column 1 label: Real [Tên Dự Án] on parent rows, or [Vai trò Subagent] on indented child rows.
+    /// </summary>
+    public string PrimaryRowLabel => IsSubagent
+        ? (!string.IsNullOrWhiteSpace(DisplayName) && !DisplayName.StartsWith("Phiên ", StringComparison.Ordinal)
+            ? DisplayName
+            : "Nhánh thực thi")
+        : ResolvedProjectName;
+
+    public string SubCountBadgeText => ChildCount > 0 ? $"+{ChildCount}" : string.Empty;
+
+    public int ClampedProgressPercent => State == AgentRunState.Completed
+        ? 100
+        : Math.Clamp(ProgressPercent, 0, 100);
+
+    public double ProgressRatio => ClampedProgressPercent / 100.0;
+
+    public string ProgressText => $"{ClampedProgressPercent}%";
+
+    /// <summary>
+    /// Pixel width for the 54px inline capsule progress bar in AgentMonitorView.
+    /// </summary>
+    public double ProgressBarFillWidth => Math.Max(3.5, Math.Round(ProgressRatio * 54.0, 1));
 
     public string ProviderBadge => Provider switch
     {
@@ -107,17 +172,26 @@ public sealed class AgentSessionItem
         _ => "Đang rảnh"
     };
 
-    public string ElapsedText
+    /// <summary>
+    /// Live per-turn stopwatch (mm:ss or hh:mm:ss) that counts active turn duration
+    /// and freezes at the exact turn completion timestamp once Completed.
+    /// </summary>
+    public string RuntimeText
     {
         get
         {
-            DateTime endRef = IsActive ? DateTime.UtcNow : LastUpdatedAtUtc;
-            TimeSpan span = endRef > StartedAtUtc ? endRef - StartedAtUtc : TimeSpan.Zero;
+            DateTime startRef = ActiveTurnStartedAtUtc != default ? ActiveTurnStartedAtUtc : StartedAtUtc;
+            DateTime endRef = IsActive
+                ? DateTime.UtcNow
+                : (TurnCompletedAtUtc ?? LastUpdatedAtUtc);
+            TimeSpan span = endRef > startRef ? endRef - startRef : TimeSpan.Zero;
             if (span.TotalHours >= 1.0)
                 return $"{(int)span.TotalHours:00}:{span.Minutes:00}:{span.Seconds:00}";
             return $"{span.Minutes:00}:{span.Seconds:00}";
         }
     }
+
+    public string ElapsedText => RuntimeText;
 
     public string RelativeTimeText
     {
@@ -139,6 +213,15 @@ public sealed class AgentSessionItem
         AgentRunState.Completed => DotDoneBrush,
         AgentRunState.Error => DotErrorBrush,
         _ => DotIdleBrush
+    };
+
+    public Brush ProgressBarBrush => State switch
+    {
+        AgentRunState.WaitingApproval => DotWaitingBrush,
+        AgentRunState.Completed => DotDoneBrush,
+        AgentRunState.Error => DotErrorBrush,
+        AgentRunState.Thinking => DotThinkingBrush,
+        _ => DotWorkingBrush
     };
 
     public Brush StatusPillBackgroundBrush => State switch
@@ -169,6 +252,29 @@ public sealed class AgentSessionItem
         AgentRunState.Completed => TextDoneBrush,
         AgentRunState.Error => TextErrorBrush,
         _ => TextIdleBrush
+    };
+
+    public AgentSessionItem WithTreePresentation(bool isExpanded, int childCount, string groupId) => new()
+    {
+        SessionId = SessionId,
+        ParentSessionId = ParentSessionId,
+        GroupId = groupId,
+        Provider = Provider,
+        ProjectName = ProjectName,
+        DisplayName = DisplayName,
+        WorkspaceHint = WorkspaceHint,
+        State = State,
+        CurrentActionText = CurrentActionText,
+        ProgressPercent = ProgressPercent,
+        StartedAtUtc = StartedAtUtc,
+        ActiveTurnStartedAtUtc = ActiveTurnStartedAtUtc,
+        TurnCompletedAtUtc = TurnCompletedAtUtc,
+        LastUpdatedAtUtc = LastUpdatedAtUtc,
+        IsSubagent = IsSubagent,
+        ChildCount = childCount,
+        IsExpanded = isExpanded,
+        ProcessId = ProcessId,
+        TargetWindowHandle = TargetWindowHandle
     };
 
     private static Brush CreateBrush(string hex)

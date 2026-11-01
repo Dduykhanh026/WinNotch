@@ -80,12 +80,104 @@
                                                          BorderBrush="#26FFFFFF"
                                                          BorderThickness="1"
                                                          CornerRadius="10"
-                                                         Margin="0,0,10,0"
+                                                         Margin="0,3,10,0"
                                                          Padding="11,8"
                                                          Cursor="Hand"
-                                                         ToolTip="{Binding FilePath}"
+                                                         RenderTransformOrigin="0.5,0.5"
+                                                         ToolTipService.InitialShowDelay="260"
+                                                         Loaded="OnItemCardLoaded"
+                                                         MouseEnter="OnItemCardMouseEnter"
+                                                         MouseLeave="OnItemCardMouseLeave"
                                                          MouseLeftButtonDown="OnItemCardMouseDown"
                                                          MouseMove="OnItemCardMouseMove">
+                                    <controls:SquircleBorder.RenderTransform>
+                                        <TransformGroup>
+                                            <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+                                            <TranslateTransform Y="0" />
+                                        </TransformGroup>
+                                    </controls:SquircleBorder.RenderTransform>
+
+                                    <!-- Rich Quick-Look Frosted Dark Preview Card -->
+                                    <controls:SquircleBorder.ToolTip>
+                                        <ToolTip Background="#0D1017"
+                                                 BorderBrush="#2CFFFFFF"
+                                                 BorderThickness="1"
+                                                 Padding="10,8"
+                                                 MaxWidth="252">
+                                            <StackPanel>
+                                                <!-- Crisp Image Preview (Up to 168x112) -->
+                                                <Border CornerRadius="6.5"
+                                                        Background="#14FFFFFF"
+                                                        BorderBrush="#24FFFFFF"
+                                                        BorderThickness="1"
+                                                        Padding="3"
+                                                        Margin="0,0,0,7"
+                                                        HorizontalAlignment="Left"
+                                                        Visibility="{Binding HasImagePreview, Converter={StaticResource BoolToVis}}">
+                                                    <Image Source="{Binding Thumbnail}"
+                                                           MaxWidth="168"
+                                                           MaxHeight="112"
+                                                           Stretch="Uniform"
+                                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                                </Border>
+
+                                                <!-- Multi-line Text / URL Snippet Preview -->
+                                                <Border CornerRadius="6"
+                                                        Background="#14FFFFFF"
+                                                        BorderBrush="#22FFFFFF"
+                                                        BorderThickness="1"
+                                                        Padding="7,5"
+                                                        Margin="0,0,0,7"
+                                                        Visibility="{Binding HasTextSnippetPreview, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{Binding PreviewSnippetText}"
+                                                               Foreground="#DCE4F5"
+                                                               FontSize="10.4"
+                                                               MaxHeight="72"
+                                                               TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </Border>
+
+                                                <!-- Header: Kind Badge + Display Name -->
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Border CornerRadius="4"
+                                                            Background="#223B82F6"
+                                                            BorderBrush="#3E60A5FA"
+                                                            BorderThickness="1"
+                                                            Padding="5,1"
+                                                            Margin="0,0,6,0"
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding KindBadgeText}"
+                                                                   Foreground="#93C5FD"
+                                                                   FontSize="9.3"
+                                                                   FontWeight="SemiBold" />
+                                                    </Border>
+
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               Foreground="#F7F8FC"
+                                                               FontSize="11.2"
+                                                               FontWeight="SemiBold"
+                                                               MaxWidth="168"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+
+                                                <TextBlock Text="{Binding SubLabel}"
+                                                           Foreground="#9AA6BE"
+                                                           FontSize="10.1"
+                                                           Margin="0,3,0,0" />
+
+                                                <TextBlock Text="{Binding FilePath}"
+                                                           Foreground="#6F7C96"
+                                                           FontSize="9.6"
+                                                           Margin="0,3,0,0"
+                                                           TextWrapping="Wrap"
+                                                           MaxHeight="34"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Visibility="{Binding HasFilePathLine, Converter={StaticResource BoolToVis}}" />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </controls:SquircleBorder.ToolTip>
+
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="48" />

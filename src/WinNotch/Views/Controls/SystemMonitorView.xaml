@@ -122,9 +122,11 @@
                                              BorderBrush="#1EFFFFFF"
                                              BorderThickness="1"
                                              Padding="4,3">
-                        <controls:SparklineGraph PrimaryValues="{Binding SysCpuHistory}"
+                        <controls:SparklineGraph x:Name="CpuSparkline"
+                                                 PrimaryValues="{Binding SysCpuHistory}"
                                                  PrimaryColor="#4C9AFF"
-                                                 IsFixedPercentScale="True" />
+                                                 IsFixedPercentScale="True"
+                                                 IsHoverReadoutEnabled="True" />
                     </controls:SquircleBorder>
                 </Grid>
 
@@ -206,8 +208,9 @@
                                    VerticalAlignment="Center" />
                     </Grid>
 
-                    <ProgressBar Style="{StaticResource NotchMetricBar}"
-                                 Value="{Binding SysRamPercent, Mode=OneWay}"
+                    <ProgressBar x:Name="RamProgressBar"
+                                 Style="{StaticResource NotchMetricBar}"
+                                 controls:SystemMonitorView.SmoothValue="{Binding SysRamPercent, Mode=OneWay}"
                                  Foreground="{Binding SysRamBarBrush}"
                                  Margin="0,5,0,0" />
                 </StackPanel>
@@ -245,8 +248,9 @@
                                    VerticalAlignment="Center" />
                     </Grid>
 
-                    <ProgressBar Style="{StaticResource NotchMetricBar}"
-                                 Value="{Binding SysDriveUsedPercent, Mode=OneWay}"
+                    <ProgressBar x:Name="DriveProgressBar"
+                                 Style="{StaticResource NotchMetricBar}"
+                                 controls:SystemMonitorView.SmoothValue="{Binding SysDriveUsedPercent, Mode=OneWay}"
                                  Foreground="#818CF8"
                                  Margin="0,5,0,0" />
                 </StackPanel>
@@ -423,11 +427,13 @@
                                          BorderThickness="1"
                                          Padding="5,4">
                     <Grid>
-                        <controls:SparklineGraph PrimaryValues="{Binding SysNetDownHistory}"
+                        <controls:SparklineGraph x:Name="NetSparkline"
+                                                 PrimaryValues="{Binding SysNetDownHistory}"
                                                  SecondaryValues="{Binding SysNetUpHistory}"
                                                  PrimaryColor="#38BDF8"
                                                  SecondaryColor="#34D399"
                                                  IsFixedPercentScale="False"
+                                                 IsHoverReadoutEnabled="True"
                                                  MinAutoPeak="65536" />
 
                         <TextBlock Text="{Binding SysNetPeakLabel}"

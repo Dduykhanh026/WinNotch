@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using WinNotch.Engine;
 using WinNotch.Models;
+using WinNotch.Views;
 
 namespace WinNotch.Services;
 
@@ -16,8 +17,12 @@ public sealed class TrayIconService : IDisposable
 
     private System.Windows.Forms.NotifyIcon? _notifyIcon;
     private System.Drawing.Icon? _appIcon;
-    private System.Windows.Forms.ToolStripMenuItem? _caffeineItem;
-    private System.Windows.Forms.ToolStripMenuItem? _micMuteItem;
+    private TrayPopupWindow? _popupWindow;
+    private bool _isDisposed;
+
+    public bool IsCaffeineChecked { get; private set; }
+    public bool IsMicMutedChecked { get; private set; }
+    public bool IsManuallyHiddenChecked { get; private set; }
 
     public TrayIconService(
         NotchStateMachine stateMachine,
@@ -54,148 +59,111 @@ public sealed class TrayIconService : IDisposable
 
     public void Start()
     {
+        if (_isDisposed)
+            return;
+
         _appIcon = LoadEmbeddedAppIcon();
+        SyncLiveStateOnUiThread();
 
-        var menu = new System.Windows.Forms.ContextMenuStrip
-        {
-            BackColor = System.Drawing.Color.FromArgb(20, 23, 32),
-            ForeColor = System.Drawing.Color.FromArgb(240, 242, 248),
-            ShowImageMargin = false
-        };
-
-        var toggleItem = new System.Windows.Forms.ToolStripMenuItem("Mở / Thu gọn WinNotch (Alt + N)");
-        toggleItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(() => _stateMachine.ToggleExpandViaHotkey());
-
-        var agentsItem = new System.Windows.Forms.ToolStripMenuItem("Mở Giám sát AI Agents");
-        agentsItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(() => _stateMachine.ExpandAndPin(NotchTab.Agents));
-
-        var systemItem = new System.Windows.Forms.ToolStripMenuItem("Mở Giám sát hệ thống & Mạng");
-        systemItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(() => _stateMachine.ExpandAndPin(NotchTab.System));
-
-        var shelfItem = new System.Windows.Forms.ToolStripMenuItem("Mở Khay giữ file");
-        shelfItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(() => _stateMachine.ExpandAndPin(NotchTab.FileShelf));
-
-        var hideItem = new System.Windows.Forms.ToolStripMenuItem("Tạm ẩn WinNotch")
-        {
-            CheckOnClick = true
-        };
-        hideItem.CheckedChanged += (_, _) =>
-        {
-            bool hide = hideItem.Checked;
-            Application.Current?.Dispatcher.BeginInvoke(() => _stateMachine.IsManuallyHidden = hide);
-        };
-
-        // Quick Tools & Toggles
-        var caffeineItem = new System.Windows.Forms.ToolStripMenuItem("Giữ sáng màn hình (Caffeine)")
-        {
-            CheckOnClick = false
-        };
-        caffeineItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(() =>
-        {
-            _displayPowerService?.ToggleCaffeine(showHud: true);
-            if (_displayPowerService != null)
-            {
-                caffeineItem.Checked = _displayPowerService.IsCaffeineActive;
-            }
-        });
-        _caffeineItem = caffeineItem;
-
-        var micMuteItem = new System.Windows.Forms.ToolStripMenuItem("Khóa Micro toàn hệ thống (Alt + M)")
-        {
-            CheckOnClick = false
-        };
-        micMuteItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(() =>
-        {
-            _audioService?.ToggleMicrophoneMute(showHud: true);
-            if (_audioService != null)
-            {
-                micMuteItem.Checked = _audioService.IsMicMuted;
-            }
-        });
-        _micMuteItem = micMuteItem;
-
-        var colorPickerItem = new System.Windows.Forms.ToolStripMenuItem("Chấm mã màu màn hình (Alt + C)");
-        colorPickerItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(() =>
-        {
-            _colorPickerService?.StartColorPicker();
-        });
-
-        var settingsItem = new System.Windows.Forms.ToolStripMenuItem("Cài đặt WinNotch...");
-        settingsItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(_openSettingsAction);
-
-        var exitItem = new System.Windows.Forms.ToolStripMenuItem("Thoát WinNotch");
-        exitItem.Click += (_, _) => Application.Current?.Dispatcher.BeginInvoke(_exitAppAction);
-
-        // Pre-display synchronization
-        menu.Opening += (_, _) =>
-        {
-            if (_displayPowerService != null && _caffeineItem != null)
-            {
-                _caffeineItem.Checked = _displayPowerService.IsCaffeineActive;
-            }
-            if (_audioService != null && _micMuteItem != null)
-            {
-                _micMuteItem.Checked = _audioService.IsMicMuted;
-            }
-        };
-
-        menu.Items.Add(toggleItem);
-        menu.Items.Add(agentsItem);
-        menu.Items.Add(systemItem);
-        menu.Items.Add(shelfItem);
-        menu.Items.Add(hideItem);
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(caffeineItem);
-        menu.Items.Add(micMuteItem);
-        menu.Items.Add(colorPickerItem);
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(settingsItem);
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(exitItem);
-
+        // ContextMenuStrip is intentionally null so right-click opens our native dark frosted WPF TrayPopupWindow
         _notifyIcon = new System.Windows.Forms.NotifyIcon
         {
             Icon = _appIcon ?? System.Drawing.SystemIcons.Application,
             Text = "WinNotch — Dynamic Notch (Alt + N)",
-            ContextMenuStrip = menu,
+            ContextMenuStrip = null,
             Visible = true
         };
 
+        _notifyIcon.MouseUp += OnNotifyIconMouseUp;
         _notifyIcon.DoubleClick += (_, _) =>
             Application.Current?.Dispatcher.BeginInvoke(() => _stateMachine.ToggleExpandViaHotkey());
     }
 
-    private void OnDisplayPowerStateChanged()
+    public TrayPopupWindow EnsurePopupWindow()
     {
-        if (_displayPowerService == null || _caffeineItem == null) return;
-        bool active = _displayPowerService.IsCaffeineActive;
-        SyncMenuItemChecked(_caffeineItem, active);
+        if (_popupWindow == null)
+        {
+            _popupWindow = new TrayPopupWindow(
+                toggleNotchAction: () => _stateMachine.ToggleExpandViaHotkey(),
+                openAgentsAction: () => _stateMachine.ExpandAndPin(NotchTab.Agents),
+                openSystemAction: () => _stateMachine.ExpandAndPin(NotchTab.System),
+                openShelfAction: () => _stateMachine.ExpandAndPin(NotchTab.FileShelf),
+                toggleHideAction: TriggerToggleHide,
+                toggleCaffeineAction: TriggerToggleCaffeine,
+                toggleMicMuteAction: TriggerToggleMicMute,
+                colorPickerAction: () => _colorPickerService?.StartColorPicker(),
+                openSettingsAction: _openSettingsAction,
+                exitAppAction: _exitAppAction);
+        }
+
+        SyncLiveStateOnUiThread();
+        return _popupWindow;
     }
 
-    private void OnAudioStateChanged()
+    public void TriggerToggleHide()
     {
-        if (_audioService == null || _micMuteItem == null) return;
-        bool muted = _audioService.IsMicMuted;
-        SyncMenuItemChecked(_micMuteItem, muted);
+        _stateMachine.IsManuallyHidden = !_stateMachine.IsManuallyHidden;
+        SyncLiveStateOnUiThread();
     }
 
-    private static void SyncMenuItemChecked(System.Windows.Forms.ToolStripMenuItem item, bool isChecked)
+    public void TriggerToggleCaffeine()
+    {
+        _displayPowerService?.ToggleCaffeine(showHud: true);
+        SyncLiveStateOnUiThread();
+    }
+
+    public void TriggerToggleMicMute()
+    {
+        _audioService?.ToggleMicrophoneMute(showHud: true);
+        SyncLiveStateOnUiThread();
+    }
+
+    public void SyncLiveState()
     {
         if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
         {
-            Application.Current.Dispatcher.BeginInvoke(() => item.Checked = isChecked);
+            Application.Current.Dispatcher.BeginInvoke(SyncLiveStateOnUiThread);
         }
         else
         {
-            item.Checked = isChecked;
+            SyncLiveStateOnUiThread();
         }
     }
+
+    private void SyncLiveStateOnUiThread()
+    {
+        IsManuallyHiddenChecked = _stateMachine.IsManuallyHidden;
+        IsCaffeineChecked = _displayPowerService?.IsCaffeineActive ?? false;
+        IsMicMutedChecked = _audioService?.IsMicMuted ?? false;
+
+        _popupWindow?.SyncLiveStates(IsManuallyHiddenChecked, IsCaffeineChecked, IsMicMutedChecked);
+    }
+
+    private void OnNotifyIconMouseUp(object? sender, System.Windows.Forms.MouseEventArgs e)
+    {
+        if (e.Button != System.Windows.Forms.MouseButtons.Right || _isDisposed)
+            return;
+
+        if (Application.Current != null)
+        {
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                if (_isDisposed) return;
+                TrayPopupWindow popup = EnsurePopupWindow();
+                popup.ShowAtCursor();
+            });
+        }
+    }
+
+    private void OnDisplayPowerStateChanged() => SyncLiveState();
+
+    private void OnAudioStateChanged() => SyncLiveState();
 
     private static System.Drawing.Icon? LoadEmbeddedAppIcon()
     {
         try
         {
-            var resInfo = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"));
+            var resInfo = Application.GetResourceStream(new Uri("pack://application:,,,/WinNotch;component/Assets/app.ico"));
             if (resInfo?.Stream != null)
             {
                 using Stream s = resInfo.Stream;
@@ -219,6 +187,10 @@ public sealed class TrayIconService : IDisposable
 
     public void Dispose()
     {
+        if (_isDisposed)
+            return;
+        _isDisposed = true;
+
         if (_displayPowerService != null)
         {
             _displayPowerService.StateChanged -= OnDisplayPowerStateChanged;
@@ -228,12 +200,25 @@ public sealed class TrayIconService : IDisposable
             _audioService.StateChanged -= OnAudioStateChanged;
         }
 
+        if (_popupWindow != null)
+        {
+            TrayPopupWindow popup = _popupWindow;
+            _popupWindow = null;
+            if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                Application.Current.Dispatcher.BeginInvoke(popup.DisposeClose);
+            else
+                popup.DisposeClose();
+        }
+
         if (_notifyIcon != null)
         {
+            _notifyIcon.MouseUp -= OnNotifyIconMouseUp;
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
             _notifyIcon = null;
         }
+
         _appIcon?.Dispose();
+        _appIcon = null;
     }
 }

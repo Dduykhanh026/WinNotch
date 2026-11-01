@@ -1,15 +1,25 @@
+using System.Globalization;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
+using WinNotch.Services;
 
 namespace WinNotch.Views.Controls;
 
 /// <summary>
 /// GPU-accelerated Monotone Cubic Hermite Sparkline Graph (iStat Menus / macOS Activity Monitor style).
-/// Supports single-series (CPU %) and dual-series (Download / Upload) with zero-overshoot splines and gradient fill.
+/// Supports single-series (CPU %) and dual-series (Download / Upload) with zero-overshoot splines,
+/// gradient fill, and interactive cursor hover scrubbing readout (0% background CPU when mouse leaves).
 /// </summary>
 public sealed class SparklineGraph : FrameworkElement
 {
     private static readonly Pen MidGridPen = CreateFrozenGridPen();
+    private static readonly Pen HoverHairlinePen = CreateFrozenSolidPen(Color.FromArgb(72, 255, 255, 255), 1.0);
+    private static readonly Pen DotWhiteRingPen = CreateFrozenSolidPen(Color.FromArgb(230, 255, 255, 255), 1.15);
+    private static readonly Brush HoverBadgeBgBrush = CreateFrozenSolidBrush(Color.FromArgb(234, 11, 14, 21));
+    private static readonly Pen HoverBadgeBorderPen = CreateFrozenSolidPen(Color.FromArgb(62, 255, 255, 255), 1.0);
+    private static readonly Brush HoverBadgeTextBrush = CreateFrozenSolidBrush(Color.FromRgb(244, 247, 254));
+    private static readonly Typeface HoverTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
 
     public static readonly DependencyProperty PrimaryValuesProperty = DependencyProperty.Register(
         nameof(PrimaryValues), typeof(double[]), typeof(SparklineGraph),
@@ -34,6 +44,12 @@ public sealed class SparklineGraph : FrameworkElement
     public static readonly DependencyProperty MinAutoPeakProperty = DependencyProperty.Register(
         nameof(MinAutoPeak), typeof(double), typeof(SparklineGraph),
         new FrameworkPropertyMetadata(65536.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public static readonly DependencyProperty IsHoverReadoutEnabledProperty = DependencyProperty.Register(
+        nameof(IsHoverReadoutEnabled), typeof(bool), typeof(SparklineGraph),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    private double? _hoverX;
 
     public double[]? PrimaryValues
     {
@@ -71,11 +87,87 @@ public sealed class SparklineGraph : FrameworkElement
         set => SetValue(MinAutoPeakProperty, value);
     }
 
+    public bool IsHoverReadoutEnabled
+    {
+        get => (bool)GetValue(IsHoverReadoutEnabledProperty);
+        set => SetValue(IsHoverReadoutEnabledProperty, value);
+    }
+
+    public bool IsHovering => _hoverX.HasValue;
+
+    public bool TryResolveHoverReadout(double x, double width, out int sampleIndex, out string readoutText)
+    {
+        sampleIndex = -1;
+        readoutText = string.Empty;
+
+        double[]? primary = PrimaryValues;
+        if (primary is not { Length: >= 2 } || width < 6.0)
+            return false;
+
+        int n = primary.Length;
+        double rightEdge = Math.Max(1.0, width - 2.5);
+        double ratio = Math.Clamp(x / rightEdge, 0.0, 1.0);
+        sampleIndex = Math.Clamp((int)Math.Round(ratio * (n - 1)), 0, n - 1);
+
+        int secAgo = (n - 1) - sampleIndex;
+        string ageLabel = secAgo <= 0 ? "Hiện tại" : $"{secAgo}s trước";
+
+        if (IsFixedPercentScale)
+        {
+            readoutText = $"{Math.Round(primary[sampleIndex]):0}% • {ageLabel}";
+        }
+        else
+        {
+            string downStr = SystemMonitorService.FormatSpeed(primary[sampleIndex], compact: true);
+            double[]? secondary = SecondaryValues;
+            if (secondary != null && sampleIndex < secondary.Length)
+            {
+                string upStr = SystemMonitorService.FormatSpeed(secondary[sampleIndex], compact: true);
+                readoutText = $"↓ {downStr}  ↑ {upStr} • {ageLabel}";
+            }
+            else
+            {
+                readoutText = $"↓ {downStr} • {ageLabel}";
+            }
+        }
+
+        return true;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (!IsHoverReadoutEnabled)
+            return;
+
+        double x = Math.Clamp(e.GetPosition(this).X, 0.0, Math.Max(1.0, ActualWidth));
+        if (!_hoverX.HasValue || Math.Abs(_hoverX.Value - x) >= 0.35)
+        {
+            _hoverX = x;
+            InvalidateVisual();
+        }
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (_hoverX.HasValue)
+        {
+            _hoverX = null;
+            InvalidateVisual();
+        }
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth;
         double h = ActualHeight;
         if (w < 6.0 || h < 6.0) return;
+
+        if (IsHoverReadoutEnabled)
+        {
+            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
+        }
 
         // Subtle mid-level reference guide line
         double midY = Math.Round(h * 0.5) + 0.5;
@@ -101,18 +193,75 @@ public sealed class SparklineGraph : FrameworkElement
             maxScale = peak * 1.12;
         }
 
+        Point[]? secondaryPts = null;
         if (secondary is { Length: >= 2 })
         {
-            DrawSeries(dc, secondary, w, h, maxScale, SecondaryColor, fillTopAlpha: 44, strokeWidth: 1.25, drawLiveDot: false);
+            secondaryPts = DrawSeries(dc, secondary, w, h, maxScale, SecondaryColor, fillTopAlpha: 44, strokeWidth: 1.25, drawLiveDot: false);
         }
 
+        Point[]? primaryPts = null;
         if (primary is { Length: >= 2 })
         {
-            DrawSeries(dc, primary, w, h, maxScale, PrimaryColor, fillTopAlpha: 68, strokeWidth: 1.5, drawLiveDot: true);
+            primaryPts = DrawSeries(dc, primary, w, h, maxScale, PrimaryColor, fillTopAlpha: 68, strokeWidth: 1.5, drawLiveDot: !_hoverX.HasValue);
+        }
+
+        if (IsHoverReadoutEnabled &&
+            _hoverX.HasValue &&
+            primaryPts != null &&
+            TryResolveHoverReadout(_hoverX.Value, w, out int idx, out string readoutText) &&
+            idx >= 0 &&
+            idx < primaryPts.Length)
+        {
+            DrawHoverScrubOverlay(dc, w, h, primaryPts[idx], secondaryPts != null && idx < secondaryPts.Length ? secondaryPts[idx] : null, readoutText);
         }
     }
 
-    private static void DrawSeries(
+    private void DrawHoverScrubOverlay(
+        DrawingContext dc,
+        double width,
+        double height,
+        Point primaryPt,
+        Point? secondaryPt,
+        string readoutText)
+    {
+        double guideX = Math.Round(primaryPt.X) + 0.5;
+        dc.DrawLine(HoverHairlinePen, new Point(guideX, 1.0), new Point(guideX, Math.Max(1.5, height - 1.0)));
+
+        if (secondaryPt.HasValue)
+        {
+            var secBrush = new SolidColorBrush(SecondaryColor);
+            secBrush.Freeze();
+            dc.DrawEllipse(secBrush, DotWhiteRingPen, secondaryPt.Value, 2.5, 2.5);
+        }
+
+        var priBrush = new SolidColorBrush(PrimaryColor);
+        priBrush.Freeze();
+        dc.DrawEllipse(priBrush, DotWhiteRingPen, primaryPt, 2.8, 2.8);
+
+        double pixelsPerDip = 1.0;
+        try { pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip; } catch { }
+
+        var ft = new FormattedText(
+            readoutText,
+            CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            HoverTypeface,
+            9.2,
+            HoverBadgeTextBrush,
+            pixelsPerDip);
+
+        double padX = 5.0;
+        double padY = 2.0;
+        double badgeW = Math.Min(width - 2.0, ft.Width + (padX * 2.0));
+        double badgeH = ft.Height + (padY * 2.0);
+        double badgeX = Math.Clamp(primaryPt.X - (badgeW * 0.5), 1.0, Math.Max(1.0, width - badgeW - 1.0));
+        double badgeY = 1.0;
+
+        dc.DrawRoundedRectangle(HoverBadgeBgBrush, HoverBadgeBorderPen, new Rect(badgeX, badgeY, badgeW, badgeH), 4.2, 4.2);
+        dc.DrawText(ft, new Point(badgeX + padX, badgeY + padY));
+    }
+
+    private static Point[] DrawSeries(
         DrawingContext dc,
         double[] values,
         double width,
@@ -127,7 +276,7 @@ public sealed class SparklineGraph : FrameworkElement
         double topPad = 2.5;
         double botPad = 1.5;
         double usableH = Math.Max(2.0, height - topPad - botPad);
-        double rightEdge = Math.Max(1.0, width - (drawLiveDot ? 2.5 : 0.5));
+        double rightEdge = Math.Max(1.0, width - 2.5);
 
         var pts = new Point[n];
         for (int i = 0; i < n; i++)
@@ -188,6 +337,8 @@ public sealed class SparklineGraph : FrameworkElement
             dc.DrawEllipse(haloBrush, null, tip, 3.6, 3.6);
             dc.DrawEllipse(strokeBrush, null, tip, 1.85, 1.85);
         }
+
+        return pts;
     }
 
     private static double[] ComputeMonotoneTangents(Point[] pts)
@@ -253,6 +404,20 @@ public sealed class SparklineGraph : FrameworkElement
             DashStyle = new DashStyle([3.0, 3.0], 0.0)
         };
         pen.DashStyle.Freeze();
+        pen.Freeze();
+        return pen;
+    }
+
+    private static SolidColorBrush CreateFrozenSolidBrush(Color c)
+    {
+        var brush = new SolidColorBrush(c);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static Pen CreateFrozenSolidPen(Color c, double thickness)
+    {
+        var pen = new Pen(CreateFrozenSolidBrush(c), thickness);
         pen.Freeze();
         return pen;
     }

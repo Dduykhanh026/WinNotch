@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using WinNotch.Models;
 using WinNotch.ViewModels;
 
@@ -8,6 +10,11 @@ namespace WinNotch.Views.Controls;
 
 public partial class ShelfView : UserControl
 {
+    private static readonly Brush CardNormalBgBrush = CreateFrozenBrush("#18FFFFFF");
+    private static readonly Brush CardNormalBorderBrush = CreateFrozenBrush("#26FFFFFF");
+    private static readonly Brush CardHoverBgBrush = CreateFrozenBrush("#22FFFFFF");
+    private static readonly Brush CardHoverBorderBrush = CreateFrozenBrush("#3EFFFFFF");
+
     private Point _dragStartPoint;
     private ShelfItem? _pendingDragItem;
     private bool _pendingDragAll;
@@ -21,6 +28,96 @@ public partial class ShelfView : UserControl
     {
         ShelfScroller.ScrollToHorizontalOffset(ShelfScroller.HorizontalOffset - (e.Delta * 0.6));
         e.Handled = true;
+    }
+
+    private void OnItemCardLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not SquircleBorder card || card.DataContext is not ShelfItem item)
+            return;
+
+        // Play tactile BackEase entrance pop (0.88 -> 1.0, 220ms) only on newly added/pasted cards when onscreen
+        if (PresentationSource.FromVisual(card) == null || (DateTime.UtcNow - item.AddedAtUtc).TotalMilliseconds > 750.0)
+            return;
+
+        if (TryGetCardTransforms(card, out ScaleTransform? scale, out _))
+        {
+            var popAnim = new DoubleAnimation(0.88, 1.0, TimeSpan.FromMilliseconds(220))
+            {
+                EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.35 },
+                FillBehavior = FillBehavior.Stop
+            };
+            scale!.ScaleX = 1.0;
+            scale.ScaleY = 1.0;
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, popAnim);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, popAnim);
+        }
+    }
+
+    private void OnItemCardMouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is not SquircleBorder card)
+            return;
+
+        card.Background = CardHoverBgBrush;
+        card.BorderBrush = CardHoverBorderBrush;
+
+        if (TryGetCardTransforms(card, out _, out TranslateTransform? translate))
+        {
+            if (PresentationSource.FromVisual(card) == null)
+            {
+                translate!.Y = -2.0;
+                return;
+            }
+
+            var liftAnim = new DoubleAnimation(translate!.Y, -2.0, TimeSpan.FromMilliseconds(150))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                FillBehavior = FillBehavior.Stop
+            };
+            translate.Y = -2.0;
+            translate.BeginAnimation(TranslateTransform.YProperty, liftAnim);
+        }
+    }
+
+    private void OnItemCardMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is not SquircleBorder card)
+            return;
+
+        card.Background = CardNormalBgBrush;
+        card.BorderBrush = CardNormalBorderBrush;
+
+        if (TryGetCardTransforms(card, out _, out TranslateTransform? translate))
+        {
+            if (PresentationSource.FromVisual(card) == null)
+            {
+                translate!.Y = 0.0;
+                return;
+            }
+
+            var dropAnim = new DoubleAnimation(translate!.Y, 0.0, TimeSpan.FromMilliseconds(160))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                FillBehavior = FillBehavior.Stop
+            };
+            translate.Y = 0.0;
+            translate.BeginAnimation(TranslateTransform.YProperty, dropAnim);
+        }
+    }
+
+    private static bool TryGetCardTransforms(SquircleBorder card, out ScaleTransform? scale, out TranslateTransform? translate)
+    {
+        scale = null;
+        translate = null;
+
+        if (card.RenderTransform is TransformGroup group && group.Children.Count >= 2)
+        {
+            scale = group.Children[0] as ScaleTransform;
+            translate = group.Children[1] as TranslateTransform;
+            return scale != null && translate != null;
+        }
+
+        return false;
     }
 
     private void OnItemCardMouseDown(object sender, MouseButtonEventArgs e)
@@ -118,5 +215,12 @@ public partial class ShelfView : UserControl
                 e.Handled = true;
             }
         }
+    }
+
+    private static Brush CreateFrozenBrush(string hex)
+    {
+        var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
+        brush.Freeze();
+        return brush;
     }
 }

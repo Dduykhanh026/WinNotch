@@ -569,8 +569,9 @@ public sealed class AgentMonitorService : IDisposable
                         AgentProvider.ClaudeCode => $"Claude · {shortId}",
                         _ => $"Phiên {shortId}"
                     },
-                    WorkspaceHint = "WinNotch",
-                    StartedAtUtc = createdUtc
+                    WorkspaceHint = string.Empty,
+                    StartedAtUtc = createdUtc,
+                    ActiveTurnStartedAtUtc = createdUtc
                 };
                 _sessions[sessionId] = session;
             }
@@ -595,6 +596,11 @@ public sealed class AgentMonitorService : IDisposable
                     string.IsNullOrWhiteSpace(session.DisplayName))
                 {
                     session.DisplayName = roleMeta.Role;
+                }
+
+                if (_sessions.TryGetValue(roleMeta.ParentId, out TrackedAgentState? parent))
+                {
+                    SyncParentChildProjectUnsafe(parent, session);
                 }
             }
         }
@@ -622,19 +628,40 @@ public sealed class AgentMonitorService : IDisposable
                     {
                         child.DisplayName = meta.Role;
                     }
+
+                    if (_sessions.TryGetValue(meta.ParentId, out TrackedAgentState? parent))
+                    {
+                        SyncParentChildProjectUnsafe(parent, child);
+                    }
                 }
             }
         }
+    }
+
+    private static void SyncParentChildProjectUnsafe(TrackedAgentState parent, TrackedAgentState child)
+    {
+        if (string.IsNullOrWhiteSpace(child.ProjectName) && !string.IsNullOrWhiteSpace(parent.ProjectName))
+            child.ProjectName = parent.ProjectName;
+        else if (string.IsNullOrWhiteSpace(parent.ProjectName) && !string.IsNullOrWhiteSpace(child.ProjectName))
+            parent.ProjectName = child.ProjectName;
+
+        if (string.IsNullOrWhiteSpace(child.WorkspaceHint) && !string.IsNullOrWhiteSpace(parent.WorkspaceHint))
+            child.WorkspaceHint = parent.WorkspaceHint;
+        else if (string.IsNullOrWhiteSpace(parent.WorkspaceHint) && !string.IsNullOrWhiteSpace(child.WorkspaceHint))
+            parent.WorkspaceHint = child.WorkspaceHint;
     }
 
     private bool RefreshTeamworkSwarmState(bool allowHud)
     {
         if (!AgentTranscriptParser.TryReadTeamworkProgressSummary(
                 _teamworkDir,
+                out string projectName,
                 out string activeMilestone,
                 out int doneM,
                 out int totalM,
+                out int progressPct,
                 out int activeWorkers,
+                out DateTime earliestStartUtc,
                 out DateTime latestWriteUtc))
         {
             return false;
@@ -645,6 +672,7 @@ public sealed class AgentMonitorService : IDisposable
             return false;
 
         const string swarmId = "teamwork:active-swarm";
+        string resolvedProject = !string.IsNullOrWhiteSpace(projectName) ? projectName : "WinNotch";
         AgentRunState prevState;
         TrackedAgentState swarm;
         bool changed = false;
@@ -657,9 +685,11 @@ public sealed class AgentMonitorService : IDisposable
                 {
                     SessionId = swarmId,
                     Provider = AgentProvider.Teamwork,
-                    DisplayName = "Teamwork Multi-Agent",
-                    WorkspaceHint = "WinNotch",
-                    StartedAtUtc = latestWriteUtc
+                    ProjectName = resolvedProject,
+                    DisplayName = resolvedProject,
+                    WorkspaceHint = resolvedProject,
+                    StartedAtUtc = earliestStartUtc,
+                    ActiveTurnStartedAtUtc = earliestStartUtc
                 };
                 _sessions[swarmId] = swarm;
             }
@@ -672,17 +702,29 @@ public sealed class AgentMonitorService : IDisposable
                 ? AgentRunState.Completed
                 : recentlyActive ? AgentRunState.Working : AgentRunState.Completed;
 
+            int nextProgress = nextState == AgentRunState.Completed ? 100 : progressPct;
+
             string milestoneBadge = totalM > 0 ? $"Mốc {Math.Min(doneM + 1, totalM)}/{totalM}" : "Đang điều phối";
             string nextAction = allMilestonesDone
                 ? $"Đã hoàn tất toàn bộ {totalM}/{totalM} mốc"
                 : !string.IsNullOrEmpty(activeMilestone)
-                    ? $"{milestoneBadge} · {activeMilestone}"
-                    : $"{milestoneBadge} · {Math.Max(1, activeWorkers)} agent hoạt động";
+                    ? activeMilestone
+                    : $"{milestoneBadge} · {Math.Max(1, activeWorkers)} nhánh thực thi";
 
-            if (swarm.State != nextState || swarm.CurrentActionText != nextAction)
+            if (swarm.State != nextState ||
+                swarm.CurrentActionText != nextAction ||
+                swarm.ProgressPercent != nextProgress ||
+                swarm.ProjectName != resolvedProject)
             {
+                swarm.ProjectName = resolvedProject;
+                swarm.DisplayName = resolvedProject;
+                swarm.WorkspaceHint = resolvedProject;
                 swarm.State = nextState;
                 swarm.CurrentActionText = nextAction;
+                swarm.ProgressPercent = nextProgress;
+                if (swarm.ActiveTurnStartedAtUtc == default || earliestStartUtc < swarm.ActiveTurnStartedAtUtc)
+                    swarm.ActiveTurnStartedAtUtc = earliestStartUtc;
+                swarm.TurnCompletedAtUtc = nextState == AgentRunState.Completed ? latestWriteUtc : null;
                 swarm.LastUpdatedAtUtc = latestWriteUtc;
                 swarm.DismissedByUser = false;
                 changed = true;
@@ -711,6 +753,8 @@ public sealed class AgentMonitorService : IDisposable
             if (s.State is AgentRunState.Working or AgentRunState.Thinking && idleMinutes > 4.5)
             {
                 s.State = AgentRunState.Completed;
+                s.ProgressPercent = 100;
+                s.TurnCompletedAtUtc ??= s.LastUpdatedAtUtc;
                 changed = true;
             }
             else if (s.State == AgentRunState.WaitingApproval && idleMinutes > 25.0)
@@ -839,8 +883,11 @@ public sealed class AgentMonitorService : IDisposable
             if (name.Length > 36) name = name[..36] + "…";
 
             string rawState = ReadJsonString(root, "state").ToLowerInvariant();
+            string project = ReadJsonString(root, "project");
+            string workspace = ReadJsonString(root, "workspace");
             string toolName = ReadJsonString(root, "toolName");
             string detail = ReadJsonString(root, "detail");
+            int explicitProgress = root.TryGetProperty("progress", out JsonElement prEl) && prEl.TryGetInt32(out int pr) ? Math.Clamp(pr, 0, 100) : -1;
             int pid = root.TryGetProperty("pid", out JsonElement pEl) && pEl.TryGetInt32(out int p) ? p : 0;
 
             AgentRunState nextState = rawState switch
@@ -855,9 +902,10 @@ public sealed class AgentMonitorService : IDisposable
             string action = !string.IsNullOrWhiteSpace(detail)
                 ? detail
                 : !string.IsNullOrWhiteSpace(toolName)
-                    ? $"Hook · {toolName}"
+                    ? AgentTranscriptParser.SummarizeToolCall(toolName, root)
                     : nextState == AgentRunState.Completed ? "Đã hoàn tất qua Hook" : "Đang thực thi qua Hook";
 
+            DateTime nowUtc = DateTime.UtcNow;
             TrackedAgentState session;
             AgentRunState prevState;
             lock (_stateLock)
@@ -867,17 +915,43 @@ public sealed class AgentMonitorService : IDisposable
                     session = new TrackedAgentState
                     {
                         SessionId = id,
-                        Provider = _sessions.ContainsKey(id) ? AgentProvider.Antigravity : AgentProvider.CustomHook,
+                        Provider = AgentProvider.CustomHook,
+                        ProjectName = project,
                         DisplayName = name,
-                        StartedAtUtc = DateTime.UtcNow
+                        WorkspaceHint = workspace,
+                        StartedAtUtc = nowUtc,
+                        ActiveTurnStartedAtUtc = nowUtc
                     };
                     _sessions[id] = session;
                 }
 
                 prevState = session.State;
+                if (!string.IsNullOrWhiteSpace(project))
+                    session.ProjectName = project;
+                if (!string.IsNullOrWhiteSpace(workspace))
+                    session.WorkspaceHint = workspace;
+
+                if (prevState is AgentRunState.Idle or AgentRunState.Completed &&
+                    nextState is AgentRunState.Working or AgentRunState.Thinking or AgentRunState.WaitingApproval)
+                {
+                    session.ActiveTurnStartedAtUtc = nowUtc;
+                    session.TurnCompletedAtUtc = null;
+                }
+
                 session.State = nextState;
                 session.CurrentActionText = action;
-                session.LastUpdatedAtUtc = DateTime.UtcNow;
+                session.ProgressPercent = explicitProgress >= 0
+                    ? explicitProgress
+                    : nextState switch
+                    {
+                        AgentRunState.Completed => 100,
+                        AgentRunState.WaitingApproval => Math.Max(session.ProgressPercent, 35),
+                        _ => Math.Max(session.ProgressPercent, 50)
+                    };
+                if (nextState == AgentRunState.Completed)
+                    session.TurnCompletedAtUtc = nowUtc;
+
+                session.LastUpdatedAtUtc = nowUtc;
                 session.DismissedByUser = false;
                 if (pid > 0) session.ProcessId = pid;
             }
@@ -897,7 +971,7 @@ public sealed class AgentMonitorService : IDisposable
             return;
         }
 
-        List<AgentSessionItem> items;
+        List<AgentSessionItem> orderedTree;
         int activeCount = 0;
         int waitingCount = 0;
         int completedCount = 0;
@@ -905,25 +979,26 @@ public sealed class AgentMonitorService : IDisposable
         lock (_stateLock)
         {
             DateTime now = DateTime.UtcNow;
-            items = _sessions.Values
+            List<AgentSessionItem> candidates = _sessions.Values
                 .Where(s => !s.DismissedByUser &&
                             s.State != AgentRunState.Idle &&
+                            !(s.IsEphemeralHelper && s.State == AgentRunState.Completed) &&
                             ((s.State is AgentRunState.Working or AgentRunState.Thinking or AgentRunState.WaitingApproval) ||
                              (now - s.LastUpdatedAtUtc).TotalMinutes <= 25.0))
-                .OrderByDescending(s => (int)s.State)
-                .ThenBy(s => s.IsSubagent ? 1 : 0)
-                .ThenByDescending(s => s.LastUpdatedAtUtc)
-                .Take(14)
                 .Select(s => new AgentSessionItem
                 {
                     SessionId = s.SessionId,
                     ParentSessionId = s.ParentSessionId,
                     Provider = s.Provider,
+                    ProjectName = s.ProjectName,
                     DisplayName = s.DisplayName,
                     WorkspaceHint = s.WorkspaceHint,
                     State = s.State,
                     CurrentActionText = s.CurrentActionText,
+                    ProgressPercent = s.ProgressPercent,
                     StartedAtUtc = s.StartedAtUtc,
+                    ActiveTurnStartedAtUtc = s.ActiveTurnStartedAtUtc,
+                    TurnCompletedAtUtc = s.TurnCompletedAtUtc,
                     LastUpdatedAtUtc = s.LastUpdatedAtUtc,
                     IsSubagent = s.IsSubagent,
                     ProcessId = s.ProcessId,
@@ -931,7 +1006,9 @@ public sealed class AgentMonitorService : IDisposable
                 })
                 .ToList();
 
-            foreach (AgentSessionItem item in items)
+            orderedTree = BuildProjectTreeItems(candidates);
+
+            foreach (AgentSessionItem item in orderedTree)
             {
                 if (item.State == AgentRunState.WaitingApproval) waitingCount++;
                 else if (item.IsActive) activeCount++;
@@ -939,7 +1016,11 @@ public sealed class AgentMonitorService : IDisposable
             }
         }
 
-        AgentSessionItem? primary = items.FirstOrDefault();
+        AgentSessionItem? primary = orderedTree.FirstOrDefault(i => i.IsWaitingApproval)
+            ?? orderedTree.FirstOrDefault(i => i.IsParentRow && i.IsActive)
+            ?? orderedTree.FirstOrDefault(i => i.IsActive)
+            ?? orderedTree.FirstOrDefault();
+
         string collapsedText = BuildCollapsedBadgeText(primary, activeCount, waitingCount);
 
         var snapshot = new AgentDashboardSnapshot
@@ -947,7 +1028,7 @@ public sealed class AgentMonitorService : IDisposable
             ActiveCount = activeCount,
             WaitingApprovalCount = waitingCount,
             CompletedRecentCount = completedCount,
-            Sessions = items,
+            Sessions = orderedTree,
             PrimarySession = primary,
             CollapsedBadgeText = collapsedText
         };
@@ -956,28 +1037,171 @@ public sealed class AgentMonitorService : IDisposable
         Application.Current?.Dispatcher.BeginInvoke(() => SnapshotUpdated?.Invoke(snapshot));
     }
 
+    internal static List<AgentSessionItem> BuildProjectTreeItems(IReadOnlyList<AgentSessionItem> candidates)
+    {
+        if (candidates.Count == 0)
+            return [];
+
+        var parents = new List<AgentSessionItem>();
+        var children = new List<AgentSessionItem>();
+
+        foreach (AgentSessionItem item in candidates)
+        {
+            if (item.IsSubagent)
+                children.Add(item);
+            else
+                parents.Add(item);
+        }
+
+        var parentById = new Dictionary<string, AgentSessionItem>(StringComparer.OrdinalIgnoreCase);
+        var bestParentByProject = new Dictionary<string, AgentSessionItem>(StringComparer.OrdinalIgnoreCase);
+        AgentSessionItem? activeTeamworkParent = null;
+
+        foreach (AgentSessionItem p in parents
+                     .OrderByDescending(p => p.IsWaitingApproval)
+                     .ThenByDescending(p => p.IsActive)
+                     .ThenByDescending(p => p.Provider == AgentProvider.Teamwork)
+                     .ThenByDescending(p => p.LastUpdatedAtUtc))
+        {
+            parentById[p.SessionId] = p;
+            string proj = p.ResolvedProjectName;
+            if (!bestParentByProject.ContainsKey(proj))
+                bestParentByProject[proj] = p;
+
+            if (p.Provider == AgentProvider.Teamwork && activeTeamworkParent == null)
+                activeTeamworkParent = p;
+        }
+
+        var childrenByParentId = new Dictionary<string, List<AgentSessionItem>>(StringComparer.OrdinalIgnoreCase);
+        var orphanChildrenByProject = new Dictionary<string, List<AgentSessionItem>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (AgentSessionItem child in children)
+        {
+            AgentSessionItem? targetParent = null;
+            if (!string.IsNullOrWhiteSpace(child.ParentSessionId))
+            {
+                parentById.TryGetValue(child.ParentSessionId, out targetParent);
+            }
+
+            if (targetParent == null)
+            {
+                bestParentByProject.TryGetValue(child.ResolvedProjectName, out targetParent);
+            }
+
+            targetParent ??= activeTeamworkParent;
+
+            if (targetParent != null)
+            {
+                if (!childrenByParentId.TryGetValue(targetParent.SessionId, out List<AgentSessionItem>? list))
+                {
+                    list = [];
+                    childrenByParentId[targetParent.SessionId] = list;
+                }
+                list.Add(child);
+            }
+            else
+            {
+                string proj = child.ResolvedProjectName;
+                if (!orphanChildrenByProject.TryGetValue(proj, out List<AgentSessionItem>? list))
+                {
+                    list = [];
+                    orphanChildrenByProject[proj] = list;
+                }
+                list.Add(child);
+            }
+        }
+
+        // Synthesize a clean project parent row if subagents exist without their top-level parent in the window
+        foreach (var (proj, orphanKids) in orphanChildrenByProject)
+        {
+            AgentSessionItem lead = orphanKids
+                .OrderByDescending(c => c.IsWaitingApproval)
+                .ThenByDescending(c => c.IsActive)
+                .ThenByDescending(c => c.LastUpdatedAtUtc)
+                .First();
+
+            string synthId = !string.IsNullOrWhiteSpace(lead.ParentSessionId)
+                ? lead.ParentSessionId
+                : $"group:{proj}";
+
+            int avgProgress = (int)Math.Round(orphanKids.Average(c => c.ClampedProgressPercent));
+            DateTime minStart = orphanKids.Min(c => c.ActiveTurnStartedAtUtc != default ? c.ActiveTurnStartedAtUtc : c.StartedAtUtc);
+            DateTime maxUpdate = orphanKids.Max(c => c.LastUpdatedAtUtc);
+            bool anyActive = orphanKids.Any(c => c.IsActive);
+
+            var synthParent = new AgentSessionItem
+            {
+                SessionId = synthId,
+                Provider = lead.Provider,
+                ProjectName = proj,
+                DisplayName = proj,
+                WorkspaceHint = lead.WorkspaceHint,
+                State = lead.State,
+                CurrentActionText = lead.CurrentActionText,
+                ProgressPercent = anyActive ? Math.Min(96, avgProgress) : 100,
+                StartedAtUtc = minStart,
+                ActiveTurnStartedAtUtc = minStart,
+                TurnCompletedAtUtc = anyActive ? null : maxUpdate,
+                LastUpdatedAtUtc = maxUpdate,
+                IsSubagent = false,
+                ProcessId = lead.ProcessId,
+                TargetWindowHandle = lead.TargetWindowHandle
+            };
+
+            parents.Add(synthParent);
+            childrenByParentId[synthId] = orphanKids;
+        }
+
+        var orderedGroups = parents
+            .Select(p =>
+            {
+                List<AgentSessionItem> kids = childrenByParentId.TryGetValue(p.SessionId, out List<AgentSessionItem>? k)
+                    ? k.OrderByDescending(c => c.IsWaitingApproval)
+                       .ThenByDescending(c => c.IsActive)
+                       .ThenByDescending(c => c.LastUpdatedAtUtc)
+                       .Take(12)
+                       .ToList()
+                    : [];
+
+                bool groupWaiting = p.IsWaitingApproval || kids.Any(c => c.IsWaitingApproval);
+                bool groupActive = p.IsActive || kids.Any(c => c.IsActive);
+                DateTime groupLatest = kids.Count > 0
+                    ? (kids.Max(c => c.LastUpdatedAtUtc) > p.LastUpdatedAtUtc ? kids.Max(c => c.LastUpdatedAtUtc) : p.LastUpdatedAtUtc)
+                    : p.LastUpdatedAtUtc;
+
+                return (Parent: p, Kids: kids, GroupWaiting: groupWaiting, GroupActive: groupActive, GroupLatest: groupLatest);
+            })
+            .OrderByDescending(g => g.GroupWaiting)
+            .ThenByDescending(g => g.GroupActive)
+            .ThenByDescending(g => g.GroupLatest)
+            .Take(8)
+            .ToList();
+
+        var result = new List<AgentSessionItem>(orderedGroups.Count * 3);
+        foreach (var g in orderedGroups)
+        {
+            string groupId = g.Parent.SessionId;
+            result.Add(g.Parent.WithTreePresentation(isExpanded: true, childCount: g.Kids.Count, groupId: groupId));
+            foreach (AgentSessionItem kid in g.Kids)
+            {
+                result.Add(kid.WithTreePresentation(isExpanded: true, childCount: 0, groupId: groupId));
+            }
+        }
+
+        return result;
+    }
+
     private static string BuildCollapsedBadgeText(AgentSessionItem? primary, int activeCount, int waitingCount)
     {
         if (waitingCount > 0)
         {
-            return waitingCount == 1
-                ? "Agent · Chờ duyệt!"
-                : $"{waitingCount} Agent chờ duyệt!";
+            return "Agent · Chờ duyệt!";
         }
 
         if (activeCount <= 0 || primary == null)
             return string.Empty;
 
-        if (activeCount >= 2)
-        {
-            return $"{activeCount} Agents · Đang chạy";
-        }
-
-        string shortAction = primary.CurrentActionText;
-        if (shortAction.Length > 16)
-            shortAction = shortAction[..16].TrimEnd() + "…";
-
-        return $"{primary.ShortProviderTag} · {shortAction}";
+        return $"{primary.ResolvedProjectName} · {primary.ProgressText}";
     }
 
     private static string? ExtractAntigravityConvId(string fullPath)

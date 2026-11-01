@@ -6,17 +6,19 @@ Xem kiến trúc & quyết định kỹ thuật tại [`SPEC.md`](./SPEC.md).
 
 ## Tính năng chính
 
-- **Dynamic Notch bo góc liên tục Apple $G^2$ (`#050507`):** Tiệp hoàn toàn với mép trên màn hình (`Y = 0`), chuyển động lò xo vật lý 60–240Hz (`SpringAnimator` + chuyển Tab lướt lò xo `ActiveTabPill`, `0% CPU` khi đứng yên).
-- **Hiệu ứng Nhận Thông Báo chuẩn Apple Dynamic Island (`424 × 80`, `R = 24`):** Thẻ thông báo nền đen tuyền OLED (`#050507`) thuần chất iOS không viền màu thừa, bắt thông báo kép không cần MSIX (`UserNotificationListener` + `SetWinEventHook` tức thời + `RegisterShellHookWindow` `HSHELL_FLASH` cho Zalo PC / Telegram / Discord), tự trích xuất Icon gốc `64×64`, hỗ trợ giữ chuột đọc lâu, nhấp mở thẳng ứng dụng nguồn và chế độ ẩn nội dung riêng tư khi thuyết trình.
-- **Hiệu ứng Face ID 1:1 iOS Dynamic Island (`LAUIPearlGlyphView`):** Tự động bung khung vuông OLED `156 × 148` ngay khi mở khóa Windows (`WTSRegisterSessionNotification`), tái hiện trọn vẹn 4 pha: gương mặt Face ID → 3 vòng quỹ đạo 3D Pearl Rings xoay chiều sâu Z → khóa khớp vòng tròn → tự vẽ dấu tích xanh `#32D74B`.
-- **Tab `Điều khiển` (macOS Sequoia Control Center):**
-  - **Thẻ Trái — Trình phát nhạc cố định:** Đồng bộ SMTC (Spotify, Apple Music, YouTube/Chrome/Edge, VLC) kèm **Ambient Album Glow**, **5 cột sóng âm đối xứng** theo phổ FFT thời gian thực và khung chờ 1:1 mở nhanh trình phát nhạc mà không nhảy bố cục.
-  - **Thẻ Phải — Trung tâm điều khiển nhanh:** Luôn giữ cố định **Âm lượng + Thiết bị đầu ra**, **Độ sáng màn hình (WMI + DDC/CI)**, **Hẹn giờ nhanh 1 hàng (`5p / 15p / 25p`)** và 3 nút tác vụ nhanh (**`Đầu ra` • `Chụp vùng` • `Khóa máy`**).
-- **Tab `Hệ thống` (Giám sát chuyên sâu kiểu iStat Menus):** Theo dõi 2 tầng siêu nhẹ (`% CPU`, `% GPU Engine`, `RAM GB`, `Ổ đĩa & Đọc/Ghi MB/s`, `Tiến trình ngốn tài nguyên nhất`, biểu đồ sóng đôi **`↓ Tải xuống / ↑ Tải lên`** 32 giây, chép nhanh `IPv4`, `Uptime` và mở `Task Mgr`), kèm tùy chọn hiện tốc độ mạng trực tiếp trên thanh Notch thu gọn.
-- **Tab `Khay giữ file` bền vững (`shelf.json`):** Kéo thả File, Thư mục, Ảnh hoặc Văn bản lên đỉnh màn hình để giữ tạm kèm Shell Thumbnail gốc và kéo ra nhiều ứng dụng (Zalo, Email, Explorer...).
-- **Chống cấn Tab trình duyệt & Tương thích Fullscreen:**
-  - Giữ phím **`Ctrl`** (`Ghost Mode`) làm mờ Notch còn `20%` và nhấp xuyên `100%` xuống Tab trình duyệt bên dưới; phím tắt **`Alt + N`** mở/thu gọn nhanh.
-  - Nhận diện Fullscreen chuẩn Auto-Hide Taskbar & màn hình `125%–200% DPI`, kèm chấm bảo mật Camera (`#30D158`) / Micro (`#FF9F0A`) và thay thế thanh Volume OSD mặc định của Windows 11.
+- **Dynamic Notch bo góc liên tục Apple $G^2$ (`#050507`) & Kính mờ Liquid Glass:** Khung vỏ đen tuyền OLED `#050507` tiệp hoàn toàn với mép trên màn hình (`Y = 0`), kết hợp bề mặt kính mờ Liquid Glass bên trong, 2 preset kích thước (`Gọn 684 × 272` / `Rộng 744 × 296`) và vật lý lò xo 60–240Hz (`SpringAnimator`, `0% CPU` khi đứng yên).
+- **Tab `Agents` — Trung tâm Giám sát AI Agents 1 cột & Co giãn chiều cao động (`≤ 2/3` màn hình):**
+  - Tự động dò thời gian thực (`~0.0% CPU`, đọc đuôi byte-offset tăng dần + Named Pipe `WinNotch_AgentActivity_v1`) cho **Antigravity CLI / Teamwork**, **Codex CLI**, **Claude Code** và Lifecycle Hooks.
+  - Bố cục **1 cột toàn chiều rộng** dạng cây phân cấp Cha – Con gồm 4 trường trực quan: **`[Tên Dự Án / Vai trò Subagent] — [Công việc đang làm (100% Tiếng Việt)] — [Tiến độ %] — [Thời gian chạy mm:ss]`**, tự động co giãn chiều cao Notch mượt theo số dòng (tối đa `2/3` chiều cao màn hình), hỗ trợ thu gọn nhánh dự án, lọc `Tất cả | Đang chạy` và nhấp mở thẳng cửa sổ IDE/Terminal.
+  - Thanh Notch thu gọn `32px` hiển thị trực tiếp **`[Tên Dự Án] · [Tiến độ %]`** (hoặc vàng hổ phách **`Chờ duyệt!`**) kèm HUD đen tuyền `#050507` khi Agent hoàn tất hoặc cần phê duyệt.
+- **Tab `Điều khiển` (macOS Sequoia Control Center & Power Suite):**
+  - **Thẻ Trái — Trình phát nhạc Apple Music:** Đồng bộ SMTC kèm **Ambient Album Glow**, hiệu ứng chuyển ảnh bìa `180ms` + thu phóng `Play/Pause`, và **5 cột sóng âm đối xứng** theo phổ FFT thời gian thực.
+  - **Thẻ Phải — Trung tâm điều khiển nhanh:** Đổi nhanh **Loa / Tai nghe 1 chạm** (`IPolicyConfig` + HUD kiểu AirPods), thanh trượt **Âm lượng & Độ sáng (WMI + DDC/CI)**, **Hẹn giờ cuộn chuột `±1 phút`**, cùng 4 tác vụ nhanh: **Giữ sáng (`Caffeine`)**, **Khóa Micro (`Alt + M`)**, **Chấm mã màu Pixel 11×11 (`Alt + C`)** và **Chụp vùng màn hình**.
+  - **Cử chỉ chuột trên thanh Notch thu gọn `32px`:** Lăn chuột chỉnh Âm lượng, `Shift + Lăn chuột` chỉnh Độ sáng, Chuột giữa `Play/Pause`, `Shift + Chuột giữa` qua bài kế tiếp.
+- **Tab `Hệ thống` (Giám sát chuyên sâu kiểu iStat Menus & Scrubbing Tương Tác):** Theo dõi 2 tầng siêu nhẹ (`% CPU`, `% GPU Engine`, thanh `RAM` & `Ổ đĩa` nội suy mượt, `Tiến trình ngốn tài nguyên`, nút **`Dọn RAM`** User-Mode, biểu đồ sóng đôi **`↓ Tải xuống / ↑ Tải lên`** 32 giây) kèm **di chuột tra cứu từng mốc giây (`Hover Scrubbing Readout`)** trên biểu đồ CPU và Mạng.
+- **Tab `Khay giữ file` bền vững (`shelf.json` & Quick-Look Preview):** Kéo thả hoặc **`+ Dán Clipboard` (`Ctrl + V`)** File, Thư mục, Ảnh chụp, Văn bản/URL lên đỉnh màn hình kèm hiệu ứng nảy thẻ, thẻ **Quick-Look xem trước ảnh & nội dung văn bản** khi rê chuột, và kéo ra nhiều ứng dụng.
+- **Cài đặt macOS Sequoia (`720 × 560`) & Menu Khay Hệ Thống Kính Mờ (`276px`):** Cửa sổ Cài đặt không viền chuẩn Sequoia chia 5 chuyên mục với thẻ chọn trực quan, đi kèm menu chuột phải khay hệ thống WPF kính mờ bo góc $G^2$ đồng bộ đa màn hình/DPI.
+- **Hiệu ứng Thông báo Dynamic Island (`424 × 80`) & Face ID 1:1 (`LAUIPearlGlyphView`):** Thẻ HUD `#050507` thuần chất iOS (kèm mẫu màu trực tiếp & thanh đo mini), mở khóa Face ID 3D Pearl Rings, `Ghost Mode` giữ `Ctrl` nhấp xuyên `100%` và tự ẩn khi xem Fullscreen.
 
 ## Chạy thử & Đóng gói Release
 

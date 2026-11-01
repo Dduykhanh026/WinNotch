@@ -3,446 +3,445 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:WinNotch.Views.Controls">
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="12" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+    <!-- =========================================================================== -->
+    <!-- SINGLE-COLUMN FULL-WIDTH PROJECT TREE (Dynamic Height up to 2/3 Screen)     -->
+    <!-- Columns: [Tên Dự Án / Subagent] — [Công việc] — [Tiến độ %] — [Thời gian]   -->
+    <!-- =========================================================================== -->
+    <controls:SquircleBorder x:Name="AgentSingleColumnCard"
+                             Background="{StaticResource FrostedCardBrush}"
+                             BorderBrush="{StaticResource FrostedCardBorderBrush}"
+                             BorderThickness="1"
+                             CornerRadius="14"
+                             Padding="13,10,13,10">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <!-- ======================================================================= -->
-        <!-- CARD 1 (LEFT): PRIMARY AGENT / SWARM FOCUS & QUICK CONTROLS             -->
-        <!-- ======================================================================= -->
-        <controls:SquircleBorder Grid.Column="0"
-                                 Background="{StaticResource FrostedCardBrush}"
-                                 BorderBrush="{StaticResource FrostedCardBorderBrush}"
-                                 BorderThickness="1"
-                                 CornerRadius="14"
-                                 Padding="14,12,14,12">
-            <Grid>
-                <!-- Empty / Standby State when 0 recent sessions exist -->
-                <Grid Visibility="{Binding HasAnyAgents, Converter={StaticResource InvBoolToVis}}">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+            <!-- =================================================================== -->
+            <!-- ROW 0: COMPACT TOP TOOLBAR (Live Summary + Filter Pills + Actions)  -->
+            <!-- =================================================================== -->
+            <Grid Grid.Row="0" Height="27" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <controls:SquircleBorder Width="42"
-                                                 Height="42"
-                                                 CornerRadius="10.5"
-                                                 Background="#163B82F6"
-                                                 BorderBrush="#2E60A5FA"
-                                                 BorderThickness="1"
-                                                 HorizontalAlignment="Center"
-                                                 Margin="0,0,0,8">
-                            <controls:IconsaxIcon Kind="Bot"
-                                                  Size="20"
-                                                  Foreground="#93C5FD"
-                                                  HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center" />
-                        </controls:SquircleBorder>
-
-                        <TextBlock Text="Sẵn sàng giám sát AI Agents"
-                                   Foreground="{StaticResource TextPrimaryBrush}"
-                                   FontSize="12.6"
-                                   FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" />
-
-                        <TextBlock Text="Tự động bắt tín hiệu Antigravity CLI, Teamwork, Codex &amp; Claude Code (0% CPU khi rảnh)"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="10.6"
-                                   TextAlignment="Center"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="265"
-                                   Margin="0,4,0,0" />
-                    </StackPanel>
-
-                    <Grid Grid.Row="1" Height="26">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="7" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <Button Grid.Column="0"
-                                Style="{StaticResource NotchPillButton}"
-                                Command="{Binding FocusPrimaryAgentCommand}"
-                                Padding="8,0"
-                                ToolTip="Chuyển nhanh tới cửa sổ Terminal hoặc IDE">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <controls:IconsaxIcon Kind="ExportTray"
-                                                      Size="11.5"
-                                                      Foreground="#93C5FD"
-                                                      Margin="0,0,5,0"
-                                                      VerticalAlignment="Center" />
-                                <TextBlock Text="Mở Terminal / IDE"
-                                           FontSize="10.5"
-                                           FontWeight="Medium"
-                                           VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-
-                        <Button Grid.Column="2"
-                                Style="{StaticResource NotchPillButton}"
-                                Command="{Binding CopyAgentHookCommand}"
-                                Padding="9,0"
-                                ToolTip="Sao chép cấu hình .agents/hooks.json mẫu vào Clipboard">
-                            <TextBlock Text="{Binding AgentHookButtonText}"
-                                       FontSize="10.4"
-                                       FontWeight="Medium"
-                                       VerticalAlignment="Center" />
-                        </Button>
-                    </Grid>
-                </Grid>
-
-                <!-- Active / Populated Primary Agent Card -->
-                <Grid Visibility="{Binding HasAnyAgents, Converter={StaticResource BoolToVis}}">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <!-- Row 0: Provider Badge + Live Status Pill + Elapsed Timer -->
-                    <Grid Grid.Row="0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <controls:SquircleBorder Width="26"
-                                                     Height="26"
-                                                     CornerRadius="6.8"
-                                                     Background="{Binding PrimaryAgent.StatusPillBackgroundBrush}"
-                                                     BorderBrush="{Binding PrimaryAgent.StatusPillBorderBrush}"
-                                                     BorderThickness="1"
-                                                     Margin="0,0,7.5,0">
-                                <controls:IconsaxIcon Kind="{Binding PrimaryAgent.ProviderIcon}"
-                                                      Size="13.5"
-                                                      Foreground="{Binding PrimaryAgent.StatusTextBrush}"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center" />
-                            </controls:SquircleBorder>
-
-                            <TextBlock Text="{Binding PrimaryAgent.ProviderBadge}"
-                                       Foreground="#A6B2CA"
-                                       FontSize="10.3"
-                                       FontWeight="Bold"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <controls:SquircleBorder CornerRadius="6"
-                                                     Background="{Binding PrimaryAgent.StatusPillBackgroundBrush}"
-                                                     BorderBrush="{Binding PrimaryAgent.StatusPillBorderBrush}"
-                                                     BorderThickness="1"
-                                                     Padding="7,2">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Ellipse Width="5.5"
-                                             Height="5.5"
-                                             Fill="{Binding PrimaryAgent.StatusDotBrush}"
-                                             Margin="0,0,4.5,0"
-                                             VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding PrimaryAgent.StatusBadgeText}"
-                                               Foreground="{Binding PrimaryAgent.StatusTextBrush}"
-                                               FontSize="10.3"
-                                               FontWeight="SemiBold"
-                                               VerticalAlignment="Center" />
-                                </StackPanel>
-                            </controls:SquircleBorder>
-
-                            <TextBlock Text="{Binding PrimaryAgent.ElapsedText}"
-                                       Typography.NumeralAlignment="Tabular"
-                                       Foreground="#8E98AE"
-                                       FontSize="10.6"
-                                       FontWeight="Medium"
-                                       Margin="7,0,0,0"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Row 1: Primary Task / Session Title -->
-                    <TextBlock Grid.Row="1"
-                               Text="{Binding PrimaryAgent.DisplayName}"
-                               ToolTip="{Binding PrimaryAgent.DisplayName}"
-                               Foreground="{StaticResource TextPrimaryBrush}"
-                               FontSize="13.2"
-                               FontWeight="SemiBold"
-                               Margin="0,9,0,0"
-                               TextTrimming="CharacterEllipsis" />
-
-                    <!-- Row 2: Live Current Tool / Milestone Step Box -->
-                    <controls:SquircleBorder Grid.Row="2"
-                                             Margin="0,8,0,0"
-                                             CornerRadius="8.5"
-                                             Background="#14FFFFFF"
-                                             BorderBrush="#20FFFFFF"
+                <!-- Left: Icon + Swarm Summary + Segmented Filter (Tất cả | Đang chạy) -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <controls:SquircleBorder Width="23"
+                                             Height="23"
+                                             CornerRadius="6"
+                                             Background="#1A3B82F6"
+                                             BorderBrush="#3460A5FA"
                                              BorderThickness="1"
-                                             Padding="9.5,6.5">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <controls:IconsaxIcon Grid.Column="0"
-                                                  Kind="Flash"
-                                                  Size="12"
-                                                  Foreground="{Binding PrimaryAgent.StatusTextBrush}"
-                                                  Margin="0,0,6.5,0"
-                                                  VerticalAlignment="Center" />
-
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding PrimaryAgent.CurrentActionText}"
-                                       ToolTip="{Binding PrimaryAgent.CurrentActionText}"
-                                       Foreground="#DCE4F5"
-                                       FontSize="11.1"
-                                       FontWeight="Medium"
-                                       TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Center" />
-                        </Grid>
+                                             Margin="0,0,7,0">
+                        <controls:IconsaxIcon Kind="Hierarchy"
+                                              Size="12.5"
+                                              Foreground="#93C5FD"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
                     </controls:SquircleBorder>
 
-                    <!-- Row 3: Swarm Counter Summary + Action Buttons -->
-                    <Grid Grid.Row="3" VerticalAlignment="Bottom">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Grid.Row="0"
-                                   Text="{Binding AgentSwarmSummaryText}"
-                                   Typography.NumeralAlignment="Tabular"
-                                   Foreground="#8D98AF"
-                                   FontSize="10.3"
-                                   Margin="1,0,0,7"
-                                   TextTrimming="CharacterEllipsis" />
-
-                        <Grid Grid.Row="1" Height="27">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="6" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="6" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <Button Grid.Column="0"
-                                    Style="{StaticResource NotchPillButton}"
-                                    Command="{Binding FocusPrimaryAgentCommand}"
-                                    Padding="8,0"
-                                    ToolTip="Đưa cửa sổ Terminal / IDE chứa Agent này lên trên cùng">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <controls:IconsaxIcon Kind="ExportTray"
-                                                          Size="11.5"
-                                                          Foreground="#93C5FD"
-                                                          Margin="0,0,5,0"
-                                                          VerticalAlignment="Center" />
-                                    <TextBlock Text="Mở cửa sổ"
-                                               FontSize="10.5"
-                                               FontWeight="Medium"
-                                               VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-
-                            <Button Grid.Column="2"
-                                    Style="{StaticResource NotchPillButton}"
-                                    Command="{Binding CopyAgentHookCommand}"
-                                    Padding="8.5,0"
-                                    ToolTip="Sao chép cấu hình .agents/hooks.json mẫu vào Clipboard">
-                                <TextBlock Text="{Binding AgentHookButtonText}"
-                                           FontSize="10.3"
-                                           FontWeight="Medium"
-                                           VerticalAlignment="Center" />
-                            </Button>
-
-                            <Button Grid.Column="4"
-                                    Style="{StaticResource NotchPillButton}"
-                                    Command="{Binding ClearCompletedAgentsCommand}"
-                                    Padding="8.5,0"
-                                    ToolTip="Ẩn các phiên đã chạy xong khỏi danh sách">
-                                <TextBlock Text="Dọn xong"
-                                           FontSize="10.3"
-                                           FontWeight="Medium"
-                                           VerticalAlignment="Center" />
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </Grid>
-            </Grid>
-        </controls:SquircleBorder>
-
-        <!-- ======================================================================= -->
-        <!-- CARD 2 (RIGHT): PARALLEL SESSIONS & SUBAGENTS LIVE STREAM               -->
-        <!-- ======================================================================= -->
-        <controls:SquircleBorder Grid.Column="2"
-                                 Background="{StaticResource FrostedCardBrush}"
-                                 BorderBrush="{StaticResource FrostedCardBorderBrush}"
-                                 BorderThickness="1"
-                                 CornerRadius="14"
-                                 Padding="14,11,14,11">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <!-- Stream Header -->
-                <Grid Grid.Row="0" Margin="0,0,0,7">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <controls:IconsaxIcon Kind="Hierarchy"
-                                              Size="13.5"
-                                              Foreground="#60A5FA"
-                                              Margin="0,0,6,0"
-                                              VerticalAlignment="Center" />
-                        <TextBlock Text="Phiên &amp; Subagents trực tiếp"
-                                   Foreground="{StaticResource TextPrimaryBrush}"
-                                   FontSize="11.4"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding AgentStreamCountBadge}"
+                    <TextBlock Text="{Binding AgentSwarmSummaryText}"
                                Typography.NumeralAlignment="Tabular"
-                               Foreground="#93C5FD"
-                               FontSize="10.4"
-                               FontWeight="Medium"
+                               Foreground="#DCE4F5"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               MaxWidth="215"
+                               TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center" />
-                </Grid>
 
-                <!-- Empty Stream Hint -->
-                <StackPanel Grid.Row="1"
-                            VerticalAlignment="Center"
-                            HorizontalAlignment="Center"
-                            Visibility="{Binding HasAnyAgents, Converter={StaticResource InvBoolToVis}}">
-                    <TextBlock Text="Chưa có phiên hoạt động gần đây"
-                               Foreground="#B4BED4"
-                               FontSize="11.3"
-                               FontWeight="Medium"
-                               HorizontalAlignment="Center" />
-                    <TextBlock Text="Khi bạn chạy /teamwork, Antigravity hoặc Codex, từng Worker &amp; Subagent sẽ hiện trực tiếp tại đây"
-                               Foreground="#7E889E"
-                               FontSize="10.3"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="255"
-                               Margin="0,4,0,0" />
+                    <!-- Filter Pills -->
+                    <controls:SquircleBorder CornerRadius="6.5"
+                                             Background="#10FFFFFF"
+                                             BorderBrush="#1EFFFFFF"
+                                             BorderThickness="1"
+                                             Padding="2"
+                                             Margin="9,0,0,0"
+                                             VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Command="{Binding SelectAllAgentsFilterCommand}"
+                                    Cursor="Hand"
+                                    Focusable="False">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <controls:SquircleBorder x:Name="PillBd"
+                                                                 CornerRadius="5"
+                                                                 Background="Transparent"
+                                                                 Padding="7,2.5">
+                                            <TextBlock x:Name="PillTxt"
+                                                       Text="Tất cả"
+                                                       Foreground="#94A0B8"
+                                                       FontSize="10"
+                                                       FontWeight="Medium" />
+                                        </controls:SquircleBorder>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsAllAgentsFilterSelected}" Value="True">
+                                                <Setter TargetName="PillBd" Property="Background" Value="#28FFFFFF" />
+                                                <Setter TargetName="PillTxt" Property="Foreground" Value="#F7F9FF" />
+                                                <Setter TargetName="PillTxt" Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <Button Command="{Binding SelectActiveAgentsFilterCommand}"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    Margin="2,0,0,0">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <controls:SquircleBorder x:Name="PillBd"
+                                                                 CornerRadius="5"
+                                                                 Background="Transparent"
+                                                                 Padding="7,2.5">
+                                            <TextBlock x:Name="PillTxt"
+                                                       Text="Đang chạy"
+                                                       Foreground="#94A0B8"
+                                                       FontSize="10"
+                                                       FontWeight="Medium" />
+                                        </controls:SquircleBorder>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsActiveAgentsFilterSelected}" Value="True">
+                                                <Setter TargetName="PillBd" Property="Background" Value="#2A3B82F6" />
+                                                <Setter TargetName="PillTxt" Property="Foreground" Value="#93C5FD" />
+                                                <Setter TargetName="PillTxt" Property="FontWeight" Value="SemiBold" />
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </StackPanel>
+                    </controls:SquircleBorder>
                 </StackPanel>
 
-                <!-- Scrollable Agent Session Cards -->
-                <ScrollViewer Grid.Row="1"
-                              VerticalScrollBarVisibility="Hidden"
-                              HorizontalScrollBarVisibility="Disabled"
-                              PreviewMouseWheel="OnAgentStreamWheel"
-                              Visibility="{Binding HasAnyAgents, Converter={StaticResource BoolToVis}}">
-                    <ItemsControl ItemsSource="{Binding AgentSessions}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
+                <!-- Right: Quick Actions (Mở cửa sổ | Chép Hook | Dọn xong) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource NotchPillButton}"
+                            Command="{Binding FocusPrimaryAgentCommand}"
+                            Height="25"
+                            Padding="8.5,0"
+                            ToolTip="Đưa cửa sổ Terminal / IDE chứa Agent chính lên trên cùng">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:IconsaxIcon Kind="ExportTray"
+                                                  Size="11"
+                                                  Foreground="#93C5FD"
+                                                  Margin="0,0,4.5,0"
+                                                  VerticalAlignment="Center" />
+                            <TextBlock Text="Mở cửa sổ"
+                                       FontSize="10.3"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource NotchPillButton}"
+                            Command="{Binding CopyAgentHookCommand}"
+                            Height="25"
+                            Padding="8,0"
+                            Margin="5,0,0,0"
+                            ToolTip="Sao chép cấu hình .agents/hooks.json mẫu vào Clipboard">
+                        <TextBlock Text="{Binding AgentHookButtonText}"
+                                   FontSize="10.2"
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center" />
+                    </Button>
+
+                    <Button Style="{StaticResource NotchPillButton}"
+                            Command="{Binding ClearCompletedAgentsCommand}"
+                            Height="25"
+                            Padding="8,0"
+                            Margin="5,0,0,0"
+                            ToolTip="Ẩn các phiên đã hoàn tất khỏi danh sách">
+                        <TextBlock Text="Dọn xong"
+                                   FontSize="10.2"
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- =================================================================== -->
+            <!-- ROW 1A: STANDBY / EMPTY STATE (0 recent sessions)                   -->
+            <!-- =================================================================== -->
+            <StackPanel Grid.Row="1"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Visibility="{Binding HasAnyAgents, Converter={StaticResource InvBoolToVis}}">
+                <controls:SquircleBorder Width="42"
+                                         Height="42"
+                                         CornerRadius="10.5"
+                                         Background="#163B82F6"
+                                         BorderBrush="#2E60A5FA"
+                                         BorderThickness="1"
+                                         HorizontalAlignment="Center"
+                                         Margin="0,0,0,8">
+                    <controls:IconsaxIcon Kind="Bot"
+                                          Size="20"
+                                          Foreground="#93C5FD"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                </controls:SquircleBorder>
+
+                <TextBlock Text="Sẵn sàng giám sát AI Agents theo Dự án"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="12.6"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+
+                <TextBlock Text="Tự động hiển thị [Tên Dự Án] — [Công việc đang làm] — [Tiến độ %] — [Thời gian chạy] từ Antigravity, Teamwork, Codex &amp; Claude Code (~0% CPU khi rảnh)"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           FontSize="10.6"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           MaxWidth="470"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+
+            <!-- =================================================================== -->
+            <!-- ROW 1B: FILTERED EMPTY HINT (No active runs while "Đang chạy" on)   -->
+            <!-- =================================================================== -->
+            <StackPanel Grid.Row="1"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Visibility="{Binding ShowEmptyFilteredAgentsHint, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="Hiện không có Agent nào đang chạy"
+                           Foreground="#DCE4F5"
+                           FontSize="11.8"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="Chuyển bộ lọc sang &quot;Tất cả&quot; để xem các phiên vừa hoàn tất gần đây."
+                           Foreground="#8B96AE"
+                           FontSize="10.5"
+                           Margin="0,4,0,0"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- =================================================================== -->
+            <!-- ROW 1C: 4-COLUMN PARENT-CHILD PROJECT TREE STREAM                   -->
+            <!-- =================================================================== -->
+            <ScrollViewer x:Name="AgentTreeScrollViewer"
+                          Grid.Row="1"
+                          VerticalScrollBarVisibility="Hidden"
+                          HorizontalScrollBarVisibility="Disabled"
+                          PreviewMouseWheel="OnAgentStreamWheel"
+                          Visibility="{Binding HasFilteredAgentSessions, Converter={StaticResource BoolToVis}}">
+                <ItemsControl x:Name="AgentProjectTreeItems"
+                              ItemsSource="{Binding FilteredAgentSessions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid x:Name="RowHost" Margin="0,0,0,6">
+                                <!-- Full-Width Clickable Row Card -->
                                 <Button Command="{Binding DataContext.FocusAgentSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding SessionId}"
                                         Cursor="Hand"
                                         Focusable="False"
-                                        Margin="0,0,0,5.5"
-                                        ToolTip="Nhấp để nhảy tới cửa sổ chứa Agent này">
+                                        ToolTip="Nhấp để mở nhanh cửa sổ Terminal / IDE của Agent này">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
                                             <controls:SquircleBorder x:Name="RowBd"
-                                                                     CornerRadius="8.5"
-                                                                     Background="#13FFFFFF"
-                                                                     BorderBrush="#1EFFFFFF"
+                                                                     CornerRadius="9"
+                                                                     Background="#17FFFFFF"
+                                                                     BorderBrush="#25FFFFFF"
                                                                      BorderThickness="1"
-                                                                     Padding="9,6">
+                                                                     Padding="10,7">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" />
+                                                        <!-- Col 0: [Tên Dự Án] or └─ [Vai trò Subagent] -->
+                                                        <ColumnDefinition Width="196" />
+                                                        <!-- Col 1: [Công việc mà agent đang làm] -->
                                                         <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
+                                                        <!-- Col 2: [Tiến độ % + 54px Capsule Bar] -->
+                                                        <ColumnDefinition Width="104" />
+                                                        <!-- Col 3: [Thời gian chạy mm:ss] -->
+                                                        <ColumnDefinition Width="56" />
                                                     </Grid.ColumnDefinitions>
 
-                                                    <Ellipse Grid.Column="0"
-                                                             Width="7"
-                                                             Height="7"
-                                                             Fill="{Binding StatusDotBrush}"
-                                                             Margin="0,0,8,0"
-                                                             VerticalAlignment="Center" />
+                                                    <!-- COLUMN 0: Project Name (Parent) or Indented Subagent Role (Child) -->
+                                                    <StackPanel Grid.Column="0"
+                                                                Orientation="Horizontal"
+                                                                VerticalAlignment="Center">
+                                                        <!-- Spacer reserved for clickable expand/collapse chevron on parent rows with children -->
+                                                        <Border Width="16"
+                                                                Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}" />
 
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto" />
-                                                                <ColumnDefinition Width="*" />
-                                                            </Grid.ColumnDefinitions>
+                                                        <!-- Tree L-connector on child subagent rows -->
+                                                        <Path Data="M 1,0 L 1,7 L 8,7"
+                                                              Stroke="#5C6985"
+                                                              StrokeThickness="1.35"
+                                                              Width="10"
+                                                              Height="10"
+                                                              Margin="0,0,4,0"
+                                                              VerticalAlignment="Center"
+                                                              Visibility="{Binding IsSubagent, Converter={StaticResource BoolToVis}}" />
 
-                                                            <TextBlock Grid.Column="0"
-                                                                       Text="{Binding ShortProviderTag}"
-                                                                       Foreground="{Binding StatusTextBrush}"
-                                                                       FontSize="9.8"
-                                                                       FontWeight="Bold"
-                                                                       Margin="0,0,5,0"
-                                                                       VerticalAlignment="Center" />
+                                                        <!-- Living Breathing Status Dot (0% CPU when Completed) -->
+                                                        <Control Style="{StaticResource BreathingStatusDotStyle}"
+                                                                 Foreground="{Binding StatusDotBrush}"
+                                                                 IsEnabled="{Binding IsActive}"
+                                                                 Margin="0,0,5.5,0"
+                                                                 VerticalAlignment="Center" />
 
-                                                            <TextBlock Grid.Column="1"
-                                                                       Text="{Binding DisplayName}"
-                                                                       Foreground="#F1F5FC"
-                                                                       FontSize="11"
-                                                                       FontWeight="SemiBold"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       VerticalAlignment="Center" />
-                                                        </Grid>
-
-                                                        <TextBlock Text="{Binding CurrentActionText}"
-                                                                   Foreground="#96A2B8"
-                                                                   FontSize="10.1"
-                                                                   Margin="0,1.5,0,0"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                    </StackPanel>
-
-                                                    <StackPanel Grid.Column="2"
-                                                                HorizontalAlignment="Right"
-                                                                VerticalAlignment="Center"
-                                                                Margin="7,0,0,0">
-                                                        <TextBlock Text="{Binding StatusBadgeText}"
-                                                                   Foreground="{Binding StatusTextBrush}"
-                                                                   FontSize="9.8"
+                                                        <!-- Primary Label: Real Project Name or Subagent Role -->
+                                                        <TextBlock x:Name="PrimaryLabelTxt"
+                                                                   Text="{Binding PrimaryRowLabel}"
+                                                                   ToolTip="{Binding PrimaryRowLabel}"
+                                                                   Foreground="#F8FAFF"
+                                                                   FontSize="11.6"
                                                                    FontWeight="SemiBold"
-                                                                   HorizontalAlignment="Right" />
-                                                        <TextBlock Text="{Binding RelativeTimeText}"
-                                                                   Typography.NumeralAlignment="Tabular"
-                                                                   Foreground="#78839B"
-                                                                   FontSize="9.4"
-                                                                   Margin="0,1.5,0,0"
-                                                                   HorizontalAlignment="Right" />
+                                                                   MaxWidth="136"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" />
+
+                                                        <!-- Child count pill on parent rows -->
+                                                        <controls:SquircleBorder CornerRadius="4.5"
+                                                                                 Background="#1A60A5FA"
+                                                                                 BorderBrush="#3260A5FA"
+                                                                                 BorderThickness="1"
+                                                                                 Padding="4.5,1"
+                                                                                 Margin="5,0,0,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="{Binding SubCountBadgeText}"
+                                                                       Typography.NumeralAlignment="Tabular"
+                                                                       Foreground="#93C5FD"
+                                                                       FontSize="9.2"
+                                                                       FontWeight="SemiBold" />
+                                                        </controls:SquircleBorder>
                                                     </StackPanel>
+
+                                                    <!-- COLUMN 1: Current Vietnamese Action / Task -->
+                                                    <TextBlock x:Name="ActionTxt"
+                                                               Grid.Column="1"
+                                                               Text="{Binding CurrentActionText}"
+                                                               ToolTip="{Binding CurrentActionText}"
+                                                               Foreground="#CED7EA"
+                                                               FontSize="11"
+                                                               FontWeight="Medium"
+                                                               Margin="10,0,10,0"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+
+                                                    <!-- COLUMN 2: Inline 54px Capsule Progress Bar + Tabular % -->
+                                                    <Grid Grid.Column="2" VerticalAlignment="Center">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="54" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <Border Grid.Column="0"
+                                                                Width="54"
+                                                                Height="4.8"
+                                                                CornerRadius="2.4"
+                                                                Background="#22FFFFFF"
+                                                                VerticalAlignment="Center">
+                                                            <Border Width="{Binding ProgressBarFillWidth}"
+                                                                    Height="4.8"
+                                                                    CornerRadius="2.4"
+                                                                    Background="{Binding ProgressBarBrush}"
+                                                                    HorizontalAlignment="Left" />
+                                                        </Border>
+
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding ProgressText}"
+                                                                   Typography.NumeralAlignment="Tabular"
+                                                                   Foreground="{Binding StatusTextBrush}"
+                                                                   FontSize="10.4"
+                                                                   FontWeight="SemiBold"
+                                                                   HorizontalAlignment="Right"
+                                                                   VerticalAlignment="Center" />
+                                                    </Grid>
+
+                                                    <!-- COLUMN 3: Live Per-Turn Stopwatch (mm:ss) -->
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding RuntimeText}"
+                                                               Typography.NumeralAlignment="Tabular"
+                                                               Foreground="#97A4BE"
+                                                               FontSize="10.6"
+                                                               FontWeight="Medium"
+                                                               HorizontalAlignment="Right"
+                                                               VerticalAlignment="Center" />
                                                 </Grid>
                                             </controls:SquircleBorder>
+
                                             <ControlTemplate.Triggers>
+                                                <!-- Indented Child Subagent Row Presentation -->
+                                                <DataTrigger Binding="{Binding IsSubagent}" Value="True">
+                                                    <Setter TargetName="RowBd" Property="CornerRadius" Value="7.5" />
+                                                    <Setter TargetName="RowBd" Property="Background" Value="#10FFFFFF" />
+                                                    <Setter TargetName="RowBd" Property="BorderBrush" Value="#1AFFFFFF" />
+                                                    <Setter TargetName="RowBd" Property="Padding" Value="9,5" />
+                                                    <Setter TargetName="PrimaryLabelTxt" Property="FontSize" Value="10.8" />
+                                                    <Setter TargetName="PrimaryLabelTxt" Property="FontWeight" Value="Medium" />
+                                                    <Setter TargetName="PrimaryLabelTxt" Property="Foreground" Value="#DCE4F5" />
+                                                    <Setter TargetName="PrimaryLabelTxt" Property="MaxWidth" Value="144" />
+                                                    <Setter TargetName="ActionTxt" Property="FontSize" Value="10.4" />
+                                                    <Setter TargetName="ActionTxt" Property="Foreground" Value="#AAB5CC" />
+                                                </DataTrigger>
+
+                                                <!-- Hover Highlight -->
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="RowBd" Property="Background" Value="#22FFFFFF" />
-                                                    <Setter TargetName="RowBd" Property="BorderBrush" Value="#34FFFFFF" />
+                                                    <Setter TargetName="RowBd" Property="Background" Value="#24FFFFFF" />
+                                                    <Setter TargetName="RowBd" Property="BorderBrush" Value="#38FFFFFF" />
                                                 </Trigger>
+
+                                                <!-- Waiting Approval Amber Highlight -->
                                                 <DataTrigger Binding="{Binding IsWaitingApproval}" Value="True">
-                                                    <Setter TargetName="RowBd" Property="Background" Value="#1CF59E0B" />
-                                                    <Setter TargetName="RowBd" Property="BorderBrush" Value="#4AFBBF24" />
+                                                    <Setter TargetName="RowBd" Property="Background" Value="#1FF59E0B" />
+                                                    <Setter TargetName="RowBd" Property="BorderBrush" Value="#52FBBF24" />
+                                                    <Setter TargetName="ActionTxt" Property="Foreground" Value="#FDE68A" />
                                                 </DataTrigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Button.Template>
                                 </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-        </controls:SquircleBorder>
-    </Grid>
+
+                                <!-- Overlay Expand/Collapse Chevron Button on Parent Rows with Subagents -->
+                                <Button Command="{Binding DataContext.ToggleAgentGroupExpandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding GroupId}"
+                                        Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}"
+                                        Width="20"
+                                        Height="22"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Margin="6,0,0,0"
+                                        Cursor="Hand"
+                                        Focusable="False"
+                                        ToolTip="Thu gọn / Mở rộng danh sách Subagents của dự án">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="ChevBd"
+                                                    Background="Transparent"
+                                                    CornerRadius="4">
+                                                <TextBlock Text="{Binding ExpandChevron}"
+                                                           Foreground="#9CB0D4"
+                                                           FontSize="11.5"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ChevBd" Property="Background" Value="#28FFFFFF" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
+
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsSubagent}" Value="True">
+                                    <Setter TargetName="RowHost" Property="Margin" Value="20,0,0,4.5" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </controls:SquircleBorder>
 </UserControl>

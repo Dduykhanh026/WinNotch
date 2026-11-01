@@ -182,7 +182,8 @@
 
                             <Grid Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center">
                                 <!-- Concentric Aura Breathing Pulse -->
-                                <controls:SquircleBorder CornerRadius="5.2"
+                                <controls:SquircleBorder x:Name="AgentBadgeAuraBorder"
+                                                         CornerRadius="5.2"
                                                          Background="{Binding CollapsedAgentAccentBrush}"
                                                          IsHitTestVisible="False"
                                                          Opacity="0"
@@ -193,8 +194,12 @@
                                     <controls:SquircleBorder.Style>
                                         <Style TargetType="controls:SquircleBorder">
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding HasActiveOrWaitingAgents}" Value="True">
-                                                    <DataTrigger.EnterActions>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding HasActiveOrWaitingAgents}" Value="True" />
+                                                        <Condition Binding="{Binding IsAuraPresented, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <MultiDataTrigger.EnterActions>
                                                         <BeginStoryboard x:Name="AgentBadgeAuraStory">
                                                             <Storyboard RepeatBehavior="Forever">
                                                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
@@ -217,11 +222,11 @@
                                                                 </DoubleAnimation>
                                                             </Storyboard>
                                                         </BeginStoryboard>
-                                                    </DataTrigger.EnterActions>
-                                                    <DataTrigger.ExitActions>
+                                                    </MultiDataTrigger.EnterActions>
+                                                    <MultiDataTrigger.ExitActions>
                                                         <StopStoryboard BeginStoryboardName="AgentBadgeAuraStory" />
-                                                    </DataTrigger.ExitActions>
-                                                </DataTrigger>
+                                                    </MultiDataTrigger.ExitActions>
+                                                </MultiDataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </controls:SquircleBorder.Style>

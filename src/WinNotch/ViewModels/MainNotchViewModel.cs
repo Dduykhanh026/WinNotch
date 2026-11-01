@@ -44,6 +44,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _ipCopiedFeedbackTimer;
     private readonly DispatcherTimer _hookCopiedFeedbackTimer;
+    private readonly HashSet<string> _collapsedAgentGroupIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _isUserDraggingSeekbar;
     private bool _suppressSliderPush;
     private string _currentLocalIpv4 = "—";
@@ -51,6 +52,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
 
     public ObservableCollection<ShelfItem> ShelfItems => _fileShelfService.Items;
     public ObservableCollection<AgentSessionItem> AgentSessions { get; } = [];
+    public ObservableCollection<AgentSessionItem> FilteredAgentSessions { get; } = [];
 
     [ObservableProperty] private NotchVisualState _visualState = NotchVisualState.CollapsedIdle;
     [ObservableProperty] private NotchTab _selectedTab = NotchTab.Agents;
@@ -170,6 +172,8 @@ public sealed partial class MainNotchViewModel : ObservableObject
     // Real-Time AI Agent Monitor (Tab "Agents" & Collapsed Live Activity)
     [ObservableProperty] private AgentSessionItem? _primaryAgent;
     [ObservableProperty] private bool _hasAnyAgents;
+    [ObservableProperty] private bool _hasFilteredAgentSessions;
+    [ObservableProperty] private bool _showOnlyActiveAgents;
     [ObservableProperty] private bool _hasActiveOrWaitingAgents;
     [ObservableProperty] private bool _isAgentWaitingApproval;
     [ObservableProperty] private int _activeAndWaitingAgentCount;
@@ -178,6 +182,10 @@ public sealed partial class MainNotchViewModel : ObservableObject
     [ObservableProperty] private string _agentSwarmSummaryText = "Tự động theo dõi ~0% CPU • 100% Offline";
     [ObservableProperty] private string _agentStreamCountBadge = "0 phiên";
     [ObservableProperty] private string _agentHookButtonText = "Chép Hook";
+
+    public bool IsAllAgentsFilterSelected => !ShowOnlyActiveAgents;
+    public bool IsActiveAgentsFilterSelected => ShowOnlyActiveAgents;
+    public bool ShowEmptyFilteredAgentsHint => HasAnyAgents && !HasFilteredAgentSessions;
 
     public bool IsCollapsedIdleVisible =>
         VisualState == NotchVisualState.CollapsedIdle ||
@@ -299,6 +307,7 @@ public sealed partial class MainNotchViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(ActiveExpandedWidth));
             OnPropertyChanged(nameof(ActiveExpandedHeight));
+            RebuildFilteredAgentSessions();
         };
 
         _audioService.StateChanged += SyncAudioState;
@@ -678,6 +687,36 @@ public sealed partial class MainNotchViewModel : ObservableObject
     private void ClearCompletedAgents() => _agentMonitorService.ClearCompletedSessions();
 
     [RelayCommand]
+    private void SelectAllAgentsFilter() => ShowOnlyActiveAgents = false;
+
+    [RelayCommand]
+    private void SelectActiveAgentsFilter() => ShowOnlyActiveAgents = true;
+
+    [RelayCommand]
+    private void ToggleAgentGroupExpand(string? groupId)
+    {
+        if (string.IsNullOrWhiteSpace(groupId))
+            return;
+
+        if (!_collapsedAgentGroupIds.Add(groupId))
+        {
+            _collapsedAgentGroupIds.Remove(groupId);
+        }
+
+        RebuildFilteredAgentSessions();
+    }
+
+    partial void OnShowOnlyActiveAgentsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsAllAgentsFilterSelected));
+        OnPropertyChanged(nameof(IsActiveAgentsFilterSelected));
+        RebuildFilteredAgentSessions();
+    }
+
+    partial void OnHasAnyAgentsChanged(bool value) => OnPropertyChanged(nameof(ShowEmptyFilteredAgentsHint));
+    partial void OnHasFilteredAgentSessionsChanged(bool value) => OnPropertyChanged(nameof(ShowEmptyFilteredAgentsHint));
+
+    [RelayCommand]
     private void ActivateNotificationHud()
     {
         if (ActiveHud.Kind == HudKind.AgentAlert)
@@ -1054,7 +1093,92 @@ public sealed partial class MainNotchViewModel : ObservableObject
         OnPropertyChanged(nameof(AgentsTabHeader));
         OnPropertyChanged(nameof(CollapsedAgentAccentBrush));
         OnPropertyChanged(nameof(CollapsedAgentPillBgBrush));
+        RebuildFilteredAgentSessions();
         RefreshBackgroundActivityState();
+    }
+
+    public void RebuildFilteredAgentSessions()
+    {
+        FilteredAgentSessions.Clear();
+
+        if (AgentSessions.Count > 0)
+        {
+            var groups = new List<(string GroupId, AgentSessionItem? Parent, List<AgentSessionItem> Children)>();
+            var groupIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (AgentSessionItem item in AgentSessions)
+            {
+                string gid = !string.IsNullOrWhiteSpace(item.GroupId)
+                    ? item.GroupId
+                    : (!string.IsNullOrWhiteSpace(item.ParentSessionId) ? item.ParentSessionId : item.SessionId);
+
+                if (!groupIndexById.TryGetValue(gid, out int idx))
+                {
+                    idx = groups.Count;
+                    groupIndexById[gid] = idx;
+                    groups.Add((gid, null, []));
+                }
+
+                var current = groups[idx];
+                if (!item.IsSubagent && current.Parent == null)
+                {
+                    groups[idx] = (gid, item, current.Children);
+                }
+                else
+                {
+                    current.Children.Add(item);
+                }
+            }
+
+            foreach (var (gid, parent, children) in groups)
+            {
+                List<AgentSessionItem> visibleChildren = ShowOnlyActiveAgents
+                    ? children.Where(c => c.IsActive).ToList()
+                    : children;
+
+                if (parent != null)
+                {
+                    if (ShowOnlyActiveAgents && !parent.IsActive && visibleChildren.Count == 0)
+                        continue;
+
+                    bool isExpanded = !_collapsedAgentGroupIds.Contains(gid);
+                    FilteredAgentSessions.Add(parent.WithTreePresentation(isExpanded, visibleChildren.Count, gid));
+
+                    if (isExpanded)
+                    {
+                        foreach (AgentSessionItem child in visibleChildren)
+                        {
+                            FilteredAgentSessions.Add(child.WithTreePresentation(true, 0, gid));
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (AgentSessionItem child in visibleChildren)
+                    {
+                        FilteredAgentSessions.Add(child.WithTreePresentation(true, 0, gid));
+                    }
+                }
+            }
+        }
+
+        HasFilteredAgentSessions = FilteredAgentSessions.Count > 0;
+
+        double baseHeight = ActiveExpandedHeight;
+        if (!HasAnyAgents || FilteredAgentSessions.Count == 0)
+        {
+            DesiredAgentsHeight = baseHeight;
+        }
+        else
+        {
+            double rowsHeight = 0.0;
+            foreach (AgentSessionItem row in FilteredAgentSessions)
+            {
+                rowsHeight += row.IsSubagent ? 36.0 : 44.0;
+            }
+
+            DesiredAgentsHeight = Math.Max(baseHeight, Math.Ceiling(124.0 + rowsHeight));
+        }
     }
 
     private static string FormatCollapsedAgentText(AgentDashboardSnapshot snap)
@@ -1085,6 +1209,8 @@ public sealed partial class MainNotchViewModel : ObservableObject
     private static string ExtractProjectName(AgentSessionItem? session)
     {
         if (session == null) return "WinNotch";
+        if (!string.IsNullOrWhiteSpace(session.ProjectName))
+            return session.ProjectName;
         if (!string.IsNullOrWhiteSpace(session.WorkspaceHint))
         {
             try
@@ -1095,7 +1221,9 @@ public sealed partial class MainNotchViewModel : ObservableObject
             }
             catch { }
         }
-        return !string.IsNullOrWhiteSpace(session.DisplayName) && session.DisplayName != "AI Agent"
+        return !string.IsNullOrWhiteSpace(session.DisplayName) &&
+               !session.DisplayName.StartsWith("Phiên ", StringComparison.Ordinal) &&
+               session.DisplayName != "AI Agent"
             ? session.DisplayName
             : "WinNotch";
     }

@@ -134,6 +134,9 @@ public partial class NotchWindow : Window
         SourceInitialized += OnSourceInitialized;
         Closed += OnWindowClosed;
         PreviewKeyDown += OnWindowPreviewKeyDown;
+        Loaded += (_, _) => UpdateAuraPresentedState();
+        IsVisibleChanged += (_, _) => UpdateAuraPresentedState();
+        LocationChanged += (_, _) => UpdateAuraPresentedState();
 
         _lastCollapsedDisplayMode = DetermineCurrentCollapsedMode();
         SyncAgentsDynamicHeight();
@@ -557,7 +560,152 @@ public partial class NotchWindow : Window
         }
     }
 
+    public static readonly DependencyProperty IsAuraPresentedProperty =
+        DependencyProperty.Register(
+            nameof(IsAuraPresented),
+            typeof(bool),
+            typeof(NotchWindow),
+            new PropertyMetadata(false));
+
+    public bool IsAuraPresented
+    {
+        get => (bool)GetValue(IsAuraPresentedProperty);
+        set => SetValue(IsAuraPresentedProperty, value);
+    }
+
+    private void UpdateAuraPresentedState()
+    {
+        bool presented = IsLoaded && IsVisible &&
+                         PresentationSource.FromVisual(this) != null &&
+                         Left >= -1000.0 && Top >= -1000.0;
+        if (IsAuraPresented != presented)
+        {
+            IsAuraPresented = presented;
+            if (!presented)
+            {
+                DetachAgentBadgeAuraClocks();
+            }
+        }
+    }
+
     private int _collapsedTransitionGeneration;
+    private long _lastCollapsedTransitionTimestamp;
+    private FrameworkElement? _cachedAgentBadgeAuraBorder;
+    private Storyboard? _cachedAgentBadgeAuraStoryboard;
+
+    private FrameworkElement? FindAgentBadgeAuraBorder()
+    {
+        if (_cachedAgentBadgeAuraBorder != null)
+            return _cachedAgentBadgeAuraBorder;
+
+        if (AgentBadgeAuraBorder != null)
+        {
+            _cachedAgentBadgeAuraBorder = AgentBadgeAuraBorder;
+            return _cachedAgentBadgeAuraBorder;
+        }
+
+        if (CollapsedContentHost == null || AgentBadgeAuraScale == null)
+            return null;
+
+        _cachedAgentBadgeAuraBorder = FindElementWithTransform(CollapsedContentHost, AgentBadgeAuraScale);
+        return _cachedAgentBadgeAuraBorder;
+    }
+
+    private Storyboard? FindAgentBadgeAuraStoryboard()
+    {
+        if (_cachedAgentBadgeAuraStoryboard != null)
+            return _cachedAgentBadgeAuraStoryboard;
+
+        var auraBorder = FindAgentBadgeAuraBorder();
+        if (auraBorder?.Style?.Triggers != null)
+        {
+            foreach (var trigger in auraBorder.Style.Triggers)
+            {
+                if (trigger is MultiDataTrigger mdt)
+                {
+                    foreach (var action in mdt.EnterActions)
+                    {
+                        if (action is BeginStoryboard bs && bs.Storyboard != null)
+                        {
+                            _cachedAgentBadgeAuraStoryboard = bs.Storyboard;
+                            return _cachedAgentBadgeAuraStoryboard;
+                        }
+                    }
+                }
+                else if (trigger is DataTrigger dt)
+                {
+                    foreach (var action in dt.EnterActions)
+                    {
+                        if (action is BeginStoryboard bs && bs.Storyboard != null)
+                        {
+                            _cachedAgentBadgeAuraStoryboard = bs.Storyboard;
+                            return _cachedAgentBadgeAuraStoryboard;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static FrameworkElement? FindElementWithTransform(DependencyObject parent, Transform targetTransform)
+    {
+        foreach (object child in LogicalTreeHelper.GetChildren(parent))
+        {
+            if (child is FrameworkElement fe)
+            {
+                if (ReferenceEquals(fe.RenderTransform, targetTransform))
+                    return fe;
+                FrameworkElement? found = FindElementWithTransform(fe, targetTransform);
+                if (found != null) return found;
+            }
+        }
+        if (parent is Visual visualParent)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(visualParent);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(visualParent, i);
+                if (child is FrameworkElement fe)
+                {
+                    if (ReferenceEquals(fe.RenderTransform, targetTransform))
+                        return fe;
+                    FrameworkElement? found = FindElementWithTransform(fe, targetTransform);
+                    if (found != null) return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void DetachAgentBadgeAuraClocks()
+    {
+        var auraBorder = FindAgentBadgeAuraBorder();
+        if (auraBorder != null)
+        {
+            var sb = FindAgentBadgeAuraStoryboard();
+            if (sb != null)
+            {
+                try
+                {
+                    sb.Stop(auraBorder);
+                    sb.Remove(auraBorder);
+                }
+                catch { }
+            }
+
+            auraBorder.BeginAnimation(UIElement.OpacityProperty, null);
+            auraBorder.Opacity = 0.0;
+        }
+
+        AgentBadgeAuraScale?.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        AgentBadgeAuraScale?.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        if (AgentBadgeAuraScale != null)
+        {
+            AgentBadgeAuraScale.ScaleX = 1.0;
+            AgentBadgeAuraScale.ScaleY = 1.0;
+        }
+    }
 
     private void PlayCollapsedModeTransition()
     {
@@ -575,15 +723,33 @@ public partial class NotchWindow : Window
         CollapsedContentScale.ScaleY = 1.0;
         CollapsedContentHost.Opacity = 1.0;
 
-        int generation = ++_collapsedTransitionGeneration;
+        // High-Frequency Sequential Transition Guard:
+        // Evaluated BEFORE presentation guard so timestamp is always recorded and rapid bursts
+        // are debounced across all execution contexts (headless, offscreen, and onscreen).
+        long now = Stopwatch.GetTimestamp();
+        double elapsedMs = _lastCollapsedTransitionTimestamp == 0
+            ? double.MaxValue
+            : (double)(now - _lastCollapsedTransitionTimestamp) * 1000.0 / Stopwatch.Frequency;
+        _lastCollapsedTransitionTimestamp = now;
+
+        if (elapsedMs < 150.0)
+        {
+            DetachAgentBadgeAuraClocks();
+            return;
+        }
 
         // Offscreen / headless test harness presentation guard:
-        // When the window is not loaded, not visible, or lacks an active HwndSource presentation source,
-        // starting compositor DoubleAnimations continuously drives DispatcherPriority.Render ticks
-        // that starve nested DispatcherPriority.Background pumps.
+        // When the window is not loaded, not visible, lacks an active HwndSource presentation source,
+        // or is located offscreen in test harnesses (Left/Top < -1000), starting compositor DoubleAnimations
+        // continuously drives DispatcherPriority.Render ticks that starve nested DispatcherPriority.Background pumps.
         // Resting baseline values are already asserted above; return early without launching animations.
-        if (!IsLoaded || !IsVisible || PresentationSource.FromVisual(this) == null)
+        if (!IsLoaded || !IsVisible || PresentationSource.FromVisual(this) == null || Left < -1000.0 || Top < -1000.0)
+        {
+            DetachAgentBadgeAuraClocks();
             return;
+        }
+
+        int generation = ++_collapsedTransitionGeneration;
 
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var duration = TimeSpan.FromMilliseconds(210);
@@ -624,6 +790,15 @@ public partial class NotchWindow : Window
             e.PropertyName == nameof(MainNotchViewModel.DesiredAgentsHeight))
         {
             SyncAgentsDynamicHeight();
+        }
+
+        if (e.PropertyName == nameof(MainNotchViewModel.HasActiveOrWaitingAgents))
+        {
+            UpdateAuraPresentedState();
+            if (!_viewModel.HasActiveOrWaitingAgents || !IsAuraPresented)
+            {
+                DetachAgentBadgeAuraClocks();
+            }
         }
 
         if (e.PropertyName is
@@ -902,6 +1077,7 @@ public partial class NotchWindow : Window
         CollapsedContentScale?.BeginAnimation(ScaleTransform.ScaleXProperty, null);
         CollapsedContentScale?.BeginAnimation(ScaleTransform.ScaleYProperty, null);
         CollapsedContentHost?.BeginAnimation(OpacityProperty, null);
+        DetachAgentBadgeAuraClocks();
         if (_wtsRegistered && _hwnd != IntPtr.Zero)
         {
             try { NativeMethods.WTSUnRegisterSessionNotification(_hwnd); } catch { }

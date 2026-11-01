@@ -98,7 +98,10 @@ public sealed class FileShelfService
         thread.SetApartmentState(ApartmentState.STA);
         thread.IsBackground = true;
         thread.Start();
-        thread.Join();
+        if (!thread.Join(3000))
+        {
+            return 0;
+        }
         return count;
     }
 
